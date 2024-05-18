@@ -1,0 +1,108 @@
+var gaulLevel2 = ee.FeatureCollection("FAO/GAUL/2015/level2");
+var uniqueCountries = gaulLevel2.distinct(['ADM0_NAME']).aggregate_array('ADM0_NAME').getInfo();
+uniqueCountries.sort();
+var countrySelect = ui.Select({items: uniqueCountries, placeholder: 'Select a country:', style: {width: '200px'}});
+var adm1Select = ui.Select({placeholder: 'Select first administrative unit:', style: {width: '200px'}});
+var adm2Select = ui.Select({placeholder: 'Select second administrative unit:', style: {width: '200px'}});
+var basinSelect = ui.Select({placeholder: 'Select basin level:', style: {width: '200px'}});
+var years = [];
+for (var i = 1991; i <= 2023; i++) {
+  years.push(i.toString());
+}
+var yearSelect = ui.Select({items: years, placeholder: 'Select the year when the flood occurred:', style: {width: '250px'}});
+var basinLevels = [];
+for (var i = 1; i <= 12; i++) {
+  basinLevels.push('Level ' + i);
+}
+basinSelect.items().reset(basinLevels);
+countrySelect.onChange(function(selectedCountry) {
+  var adm1List = gaulLevel2.filter(ee.Filter.eq('ADM0_NAME', selectedCountry)).distinct(['ADM1_NAME']).aggregate_array('ADM1_NAME').getInfo();
+  adm1List.sort();
+  adm1Select.items().reset(adm1List);
+  adm2Select.items().reset([]);
+});
+adm1Select.onChange(function(selectedAdm1) {
+  var adm2List = gaulLevel2.filter(ee.Filter.and(ee.Filter.eq('ADM0_NAME', countrySelect.getValue()), ee.Filter.eq('ADM1_NAME', selectedAdm1))).distinct(['ADM2_NAME']).aggregate_array('ADM2_NAME').getInfo();
+  adm2List.sort();
+  adm2Select.items().reset(adm2List);
+});
+var legendWidget = ui.Panel({style: {margin: '0 0 4px 0'}});
+var legendTitle = ui.Label({value: 'ODGFI Classes Legend', style: {fontWeight: 'bold', fontSize: '16px', margin: '0 0 4px 0', padding: '0'}});
+legendWidget.add(legendTitle);
+var colors = ['#8B0000', '#FF3333', '#FF8C00', '#FFA500', '#FFD700', '#FFFF00', '#32CD32', '#90EE90', '#4682B4', '#B0E0E6'];
+var classNames = ['Class 10', 'Class 9', 'Class 8', 'Class 7', 'Class 6', 'Class 5', 'Class 4', 'Class 3', 'Class 2', 'Class 1'];
+colors = colors.reverse();
+classNames = classNames.reverse();
+for (var i = 0; i < colors.length; i++) {
+  var legendItem = ui.Panel({layout: ui.Panel.Layout.flow('horizontal'), style: {margin: '0 0 2px 0'}});
+  legendItem.add(ui.Label({style: {backgroundColor: colors[i], padding: '8px', margin: '0 6px 0 0'}}));
+  legendItem.add(ui.Label({value: classNames[i], style: {margin: '0 0 0 4px'}}));
+  legendWidget.add(legendItem);
+}
+var outputLabel = ui.Label();
+var medianAdjustedGFI;
+function computeODGFI(yearsBack) {
+  var selectedYear = parseInt(yearSelect.getValue());
+  var startDate = selectedYear.toString() + '-01-01';
+  var endDate = selectedYear.toString() + '-12-31';
+  var historicalStart = (selectedYear - yearsBack).toString() + '-01-01';
+  var historicalEnd = (selectedYear - 1).toString() + '-12-31';
+  var basinLevel = basinSelect.getValue().split(' ')[1];
+  var basinDataset = ee.FeatureCollection('WWF/HydroSHEDS/v1/Basins/hybas_' + basinLevel);
+  var geometry = gaulLevel2.filter(ee.Filter.and(ee.Filter.eq('ADM0_NAME', countrySelect.getValue()), ee.Filter.eq('ADM1_NAME', adm1Select.getValue()), ee.Filter.eq('ADM2_NAME', adm2Select.getValue()))).geometry();
+  var clippedBasinDataset = basinDataset.filterBounds(geometry);
+  Map.layers().reset();
+  var FA = ee.Image('MERIT/Hydro/v1_0_1').select('upa').clip(clippedBasinDataset);
+  var HAND = ee.Image('MERIT/Hydro/v1_0_1').select('hnd').clip(clippedBasinDataset);
+  var h0 = FA.pow(0.3);
+  var h1 = h0.multiply(2);
+  var h2 = h1.divide(100);
+  var GFI = h2.divide(HAND).log();
+  var normalized_GFI = GFI.add(9.3427).divide(6.3769).unmask(1.0);
+  var chirps = ee.ImageCollection('UCSB-CHG/CHIRPS/DAILY').filter(ee.Filter.date(startDate, endDate)).select('precipitation');
+  var months = ee.List.sequence(1, 12);
+  var monthlyPrecip = ee.ImageCollection.fromImages(months.map(function(month) {
+    var start = ee.Date.fromYMD(selectedYear, month, 1);
+    var end = start.advance(1, 'month');
+    return chirps.filterDate(start, end).mean().set('month', month);
+  }));
+  var historicalChirps = ee.ImageCollection('UCSB-CHG/CHIRPS/DAILY').filter(ee.Filter.date(historicalStart, historicalEnd)).select('precipitation');
+  var historicalMonthlyPrecip = ee.ImageCollection.fromImages(months.map(function(month) {
+    var start = ee.Date.fromYMD(selectedYear - yearsBack, month, 1);
+    var end = start.advance(1, 'month');
+    return historicalChirps.filterDate(start, end).mean().set('month', month);
+  })).mean();
+  var allAdjustedGFI = months.map(function(month) {
+    var currentMonthPrecip = monthlyPrecip.filter(ee.Filter.eq('month', month)).first();
+    var ratio = currentMonthPrecip.divide(historicalMonthlyPrecip);
+    var adjustedGFI = normalized_GFI.multiply(ratio.multiply(0.625)).clip(geometry).multiply(10).int().clamp(0, 9);
+    return adjustedGFI;
+  });
+  allAdjustedGFI = ee.ImageCollection.fromImages(allAdjustedGFI);
+  medianAdjustedGFI = allAdjustedGFI.median().rename('ODGFI');
+  var visParams = {min: 0, max: 9, palette: ['#B0E0E6', '#4682B4', '#90EE90', '#32CD32', '#FFFF00', '#FFD700', '#FFA500', '#FF8C00', '#FF3333', '#8B0000']};
+  Map.addLayer(clippedBasinDataset, {color: '0000FF', fillColor: '00000000'}, 'Selected Basin Level');
+  Map.addLayer(medianAdjustedGFI, visParams, 'Median Adjusted Classified GFI');
+  Map.centerObject(clippedBasinDataset, 8);
+}
+var button5Year = ui.Button('5-year ODGFI', function() { computeODGFI(5); });
+var button10Year = ui.Button('10-year ODGFI', function() { computeODGFI(10); });
+Map.onClick(function(coords) {
+  var point = ee.Geometry.Point([coords.lon, coords.lat]);
+  var value = medianAdjustedGFI.reduceRegion({
+    reducer: ee.Reducer.first(),
+    geometry: point,
+    scale: 30
+  });
+  value.evaluate(function(result) {
+    if (result.ODGFI !== undefined) {
+      var classValue = Math.ceil(result.ODGFI + 1);
+      outputLabel.setValue('The ODGFI Class is: Class ' + classValue);
+    } else {
+      outputLabel.setValue('No ODGFI Class available at this location.');
+    }
+  });
+});
+var panel = ui.Panel({widgets: [countrySelect, adm1Select, adm2Select, basinSelect, yearSelect, button5Year, button10Year, outputLabel], style: {width: '250px', padding: '8px'}});
+var uiRoot = ui.root;
+uiRoot.add(panel).add(legendWidget);
