@@ -1,0 +1,668 @@
+// IMAN JAVADZARIN
+Map.addLayer(table);
+Map.centerObject(table, 9);
+var startDate = ee.Date('2017-01-01');
+var endDate = ee.Date('2023-12-31');
+var precipitation = ee.ImageCollection('UCSB-CHG/CHIRPS/DAILY').select('precipitation');
+var getMonthlySum = function(collection) {
+  var years = ee.List.sequence(ee.Date(startDate).get('year'), ee.Date(endDate).get('year'));
+  var months = ee.List.sequence(1, 12);
+  var byMonthYear = ee.ImageCollection.fromImages(
+    years.map(function(y) {
+      return months.map(function(m) {
+        var w = collection.filter(ee.Filter.calendarRange(y, y, 'year'))
+                          .filter(ee.Filter.calendarRange(m, m, 'month'))
+                          .sum() 
+                          .set('year', y)
+                          .set('month', m)
+                          .set('system:time_start', ee.Date.fromYMD(y, m, 1));
+        return w;
+      });
+    }).flatten()
+  );
+  return byMonthYear;
+};
+var monthlyPrecipitation = getMonthlySum(precipitation);
+var precipitationChart = ui.Chart.image.series({
+  imageCollection: monthlyPrecipitation,
+  region: table,
+  reducer: ee.Reducer.mean(),
+  scale: 10000, 
+  xProperty: 'system:time_start' 
+}).setOptions({
+  title: 'Average Cumulative Monthly Precipitation',
+  vAxis: {title: '(mm/month)'},
+  hAxis: {title: 'Time'},
+  lineWidth: 1,
+  pointSize: 3,
+  series: {0: {color: '1f77b4'}} 
+});
+print(precipitationChart);
+var ndvi = ee.ImageCollection('MODIS/061/MOD13A2').select('NDVI')
+    .map(function(image) {
+      return image.multiply(0.0001).copyProperties(image, ['system:time_start']);
+    });
+var getMonthlyMean = function(collection) {
+  var years = ee.List.sequence(ee.Date(startDate).get('year'), ee.Date(endDate).get('year'));
+  var months = ee.List.sequence(1, 12);
+  var byMonthYear = ee.ImageCollection.fromImages(
+    years.map(function(y) {
+      return months.map(function(m) {
+        var w = collection.filter(ee.Filter.calendarRange(y, y, 'year'))
+                          .filter(ee.Filter.calendarRange(m, m, 'month'))
+                          .mean() 
+                          .set('year', y)
+                          .set('month', m)
+                          .set('system:time_start', ee.Date.fromYMD(y, m, 1));
+        return w;
+      });
+    }).flatten()
+  );
+  return byMonthYear;
+};
+var monthlyNDVI = getMonthlyMean(ndvi);
+var ndviChart = ui.Chart.image.series({
+  imageCollection: monthlyNDVI,
+  region: table,
+  reducer: ee.Reducer.mean(),
+  scale: 10000, 
+  xProperty: 'system:time_start' 
+}).setOptions({
+  title: 'Average Monthly NDVI',
+  vAxis: {title: 'NDVI'},
+  hAxis: {title: 'Time'},
+  lineWidth: 1,
+  pointSize: 3,
+  series: {0: {color: '00FF00'}} 
+});
+print(ndviChart);
+var evi = ee.ImageCollection('MODIS/061/MOD13A2').select('EVI')
+    .map(function(image) {
+      return image.multiply(0.0001).copyProperties(image, ['system:time_start']);
+    });
+var getMonthlyMean = function(collection) {
+  var years = ee.List.sequence(ee.Date(startDate).get('year'), ee.Date(endDate).get('year'));
+  var months = ee.List.sequence(1, 12);
+  var byMonthYear = ee.ImageCollection.fromImages(
+    years.map(function(y) {
+      return months.map(function(m) {
+        var w = collection.filter(ee.Filter.calendarRange(y, y, 'year'))
+                          .filter(ee.Filter.calendarRange(m, m, 'month'))
+                          .mean() 
+                          .set('year', y)
+                          .set('month', m)
+                          .set('system:time_start', ee.Date.fromYMD(y, m, 1));
+        return w;
+      });
+    }).flatten()
+  );
+  return byMonthYear;
+};
+var monthlyEVI = getMonthlyMean(evi);
+var eviChart = ui.Chart.image.series({
+  imageCollection: monthlyEVI,
+  region: table,
+  reducer: ee.Reducer.mean(),
+  scale: 10000, 
+  xProperty: 'system:time_start' 
+}).setOptions({
+  title: 'Average Monthly EVI',
+  vAxis: {title: 'EVI'},
+  hAxis: {title: 'Time'},
+  lineWidth: 1,
+  pointSize: 3,
+  series: {0: {color: '00EB00'}} 
+});
+print(eviChart);
+var lai = ee.ImageCollection('MODIS/061/MOD15A2H').select('Lai_500m')
+    .map(function(image) {
+      return image.multiply(0.1).rename('LAI').copyProperties(image, ['system:time_start']);
+    });
+var getMonthlyMean = function(collection) {
+  var years = ee.List.sequence(ee.Date(startDate).get('year'), ee.Date(endDate).get('year'));
+  var months = ee.List.sequence(1, 12);
+  var byMonthYear = ee.ImageCollection.fromImages(
+    years.map(function(y) {
+      return months.map(function(m) {
+        var w = collection.filter(ee.Filter.calendarRange(y, y, 'year'))
+                          .filter(ee.Filter.calendarRange(m, m, 'month'))
+                          .mean() 
+                          .set('year', y)
+                          .set('month', m)
+                          .set('system:time_start', ee.Date.fromYMD(y, m, 1));
+        return w;
+      });
+    }).flatten()
+  );
+  return byMonthYear;
+};
+var monthlyLAI = getMonthlyMean(lai);
+var laiChart = ui.Chart.image.series({
+  imageCollection: monthlyLAI,
+  region: table,
+  reducer: ee.Reducer.mean(),
+  scale: 10000, 
+  xProperty: 'system:time_start' 
+}).setOptions({
+  title: 'Average Monthly LAI',
+  vAxis: {title: 'LAI'},
+  hAxis: {title: 'Time'},
+  lineWidth: 1,
+  pointSize: 3,
+  series: {0: {color: '00EB00'}} 
+});
+print(laiChart);
+var et = ee.ImageCollection('MODIS/061/MOD16A2GF').select('ET')
+    .map(function(image) {
+      return image.multiply(0.1).copyProperties(image, ['system:time_start']);
+    });
+var getMonthlyMean = function(collection) {
+  var years = ee.List.sequence(ee.Date(startDate).get('year'), ee.Date(endDate).get('year'));
+  var months = ee.List.sequence(1, 12);
+  var byMonthYear = ee.ImageCollection.fromImages(
+    years.map(function(y) {
+      return months.map(function(m) {
+        var w = collection.filter(ee.Filter.calendarRange(y, y, 'year'))
+                          .filter(ee.Filter.calendarRange(m, m, 'month'))
+                          .mean() 
+                          .set('year', y)
+                          .set('month', m)
+                          .set('system:time_start', ee.Date.fromYMD(y, m, 1));
+        return w;
+      });
+    }).flatten()
+  );
+  return byMonthYear;
+};
+var monthlyET = getMonthlyMean(et);
+var etChart = ui.Chart.image.series({
+  imageCollection: monthlyET,
+  region: table,
+  reducer: ee.Reducer.mean(),
+  scale: 10000, 
+  xProperty: 'system:time_start' 
+}).setOptions({
+  title: 'Average Monthly ET',
+  vAxis: {title: '(mm/month)'},
+  hAxis: {title: 'Time'},
+  lineWidth: 1,
+  pointSize: 3,
+  series: {0: {color: '00B1BD'}} 
+});
+print(etChart);
+var le = ee.ImageCollection('MODIS/061/MOD16A2GF').select('LE')
+    .map(function(image) {
+      return image.divide(10000).copyProperties(image, ['system:time_start']);
+    });
+var getMonthlyMean = function(collection) {
+  var years = ee.List.sequence(ee.Date(startDate).get('year'), ee.Date(endDate).get('year'));
+  var months = ee.List.sequence(1, 12);
+  var byMonthYear = ee.ImageCollection.fromImages(
+    years.map(function(y) {
+      return months.map(function(m) {
+        var w = collection.filter(ee.Filter.calendarRange(y, y, 'year'))
+                          .filter(ee.Filter.calendarRange(m, m, 'month'))
+                          .mean() 
+                          .set('year', y)
+                          .set('month', m)
+                          .set('system:time_start', ee.Date.fromYMD(y, m, 1));
+        return w;
+      });
+    }).flatten()
+  );
+  return byMonthYear;
+};
+var monthlyLE = getMonthlyMean(le);
+var leChart = ui.Chart.image.series({
+  imageCollection: monthlyLE,
+  region: table,
+  reducer: ee.Reducer.mean(),
+  scale: 10000, 
+  xProperty: 'system:time_start' 
+}).setOptions({
+  title: 'Average Monthly LE',
+  vAxis: {title: '(J/m^2/month)'},
+  hAxis: {title: 'Time'},
+  lineWidth: 1,
+  pointSize: 3,
+  series: {0: {color: 'FF8D1E'}} 
+});
+print(leChart);
+var dlst = ee.ImageCollection('MODIS/061/MOD11A2').select('LST_Day_1km')
+    .map(function(image) {
+      return image.multiply(0.02).subtract(273.15).rename('daytime LST').copyProperties(image, ['system:time_start']);
+    });
+var getMonthlyMean = function(collection) {
+  var years = ee.List.sequence(ee.Date(startDate).get('year'), ee.Date(endDate).get('year'));
+  var months = ee.List.sequence(1, 12);
+  var byMonthYear = ee.ImageCollection.fromImages(
+    years.map(function(y) {
+      return months.map(function(m) {
+        var w = collection.filter(ee.Filter.calendarRange(y, y, 'year'))
+                          .filter(ee.Filter.calendarRange(m, m, 'month'))
+                          .mean() 
+                          .set('year', y)
+                          .set('month', m)
+                          .set('system:time_start', ee.Date.fromYMD(y, m, 1));
+        return w;
+      });
+    }).flatten()
+  );
+  return byMonthYear;
+};
+var monthlyDLST = getMonthlyMean(dlst);
+var dlstChart = ui.Chart.image.series({
+  imageCollection: monthlyDLST,
+  region: table,
+  reducer: ee.Reducer.mean(),
+  scale: 10000, 
+  xProperty: 'system:time_start' 
+}).setOptions({
+  title: 'Average Monthly Daytime LST',
+  vAxis: {title: '(°C)'},
+  hAxis: {title: 'Time'},
+  lineWidth: 1,
+  pointSize: 3,
+  series: {0: {color: 'FF0000'}} 
+});
+print(dlstChart);
+var nlst = ee.ImageCollection('MODIS/061/MOD11A2').select('LST_Night_1km')
+    .map(function(image) {
+      return image.multiply(0.02).subtract(273.15).rename('nighttime LST').copyProperties(image, ['system:time_start']);
+    });
+var getMonthlyMean = function(collection) {
+  var years = ee.List.sequence(ee.Date(startDate).get('year'), ee.Date(endDate).get('year'));
+  var months = ee.List.sequence(1, 12);
+  var byMonthYear = ee.ImageCollection.fromImages(
+    years.map(function(y) {
+      return months.map(function(m) {
+        var w = collection.filter(ee.Filter.calendarRange(y, y, 'year'))
+                          .filter(ee.Filter.calendarRange(m, m, 'month'))
+                          .mean() 
+                          .set('year', y)
+                          .set('month', m)
+                          .set('system:time_start', ee.Date.fromYMD(y, m, 1));
+        return w;
+      });
+    }).flatten()
+  );
+  return byMonthYear;
+};
+var monthlyNLST = getMonthlyMean(nlst);
+var nlstChart = ui.Chart.image.series({
+  imageCollection: monthlyNLST,
+  region: table,
+  reducer: ee.Reducer.mean(),
+  scale: 10000, 
+  xProperty: 'system:time_start' 
+}).setOptions({
+  title: 'Average Monthly Nighttime LST',
+  vAxis: {title: '(°C)'},
+  hAxis: {title: 'Time'},
+  lineWidth: 1,
+  pointSize: 3,
+  series: {0: {color: 'FF0000'}} 
+});
+print(nlstChart);
+var getMonthlyTemperatureDifference = function() {
+  var localDLST = ee.ImageCollection('MODIS/061/MOD11A2').select('LST_Day_1km')
+      .map(function(image) {
+        return image.multiply(0.02).subtract(273.15).rename('daytime LST')
+            .copyProperties(image, ['system:time_start']);
+      });
+  var localNLST = ee.ImageCollection('MODIS/061/MOD11A2').select('LST_Night_1km')
+      .map(function(image) {
+        return image.multiply(0.02).subtract(273.15).rename('nighttime LST')
+            .copyProperties(image, ['system:time_start']);
+      });
+  var dayMonthly = getMonthlyMean(localDLST);
+  var nightMonthly = getMonthlyMean(localNLST);
+    var diffCollection = dayMonthly.map(function(dayImage) {
+    var dayTime = ee.Date(dayImage.get('system:time_start'));
+    var nightImage = nightMonthly.filterDate(dayTime, dayTime.advance(1, 'month')).first();
+    return dayImage.subtract(nightImage)
+           .set('system:time_start', dayTime)
+           .rename('day-night LST difference');
+  });
+  return diffCollection;
+};
+var getMonthlyMean = function(collection) {
+  var years = ee.List.sequence(ee.Date(startDate).get('year'), ee.Date(endDate).get('year'));
+  var months = ee.List.sequence(1, 12);
+  var byMonthYear = ee.ImageCollection.fromImages(
+    years.map(function(y) {
+      return months.map(function(m) {
+        var w = collection.filter(ee.Filter.calendarRange(y, y, 'year'))
+                          .filter(ee.Filter.calendarRange(m, m, 'month'))
+                          .mean()
+                          .set('year', y)
+                          .set('month', m)
+                          .set('system:time_start', ee.Date.fromYMD(y, m, 1));
+        return w;
+      });
+    }).flatten()
+  );
+  return byMonthYear;
+};
+var monthlyTemperatureDifference = getMonthlyTemperatureDifference();
+var diffChart = ui.Chart.image.series({
+  imageCollection: monthlyTemperatureDifference,
+  region: table,
+  reducer: ee.Reducer.mean(),
+  scale: 10000, 
+  xProperty: 'system:time_start'
+}).setOptions({
+  title: 'Average Monthly Day-Night Temperature Difference',
+  vAxis: {title: '(°C)'},
+  hAxis: {title: 'Time'},
+  lineWidth: 1,
+  pointSize: 3,
+  series: {0: {color: '00FF00'}}  
+});
+print(diffChart);
+var niralbedo = ee.ImageCollection('MODIS/061/MCD43A3').select('Albedo_BSA_nir')
+    .map(function(image) {
+      return image.multiply(0.1).rename('NIR Albedo').copyProperties(image, ['system:time_start']);
+    });
+var getMonthlyMean = function(collection) {
+  var years = ee.List.sequence(ee.Date(startDate).get('year'), ee.Date(endDate).get('year'));
+  var months = ee.List.sequence(1, 12);
+  var byMonthYear = ee.ImageCollection.fromImages(
+    years.map(function(y) {
+      return months.map(function(m) {
+        var w = collection.filter(ee.Filter.calendarRange(y, y, 'year'))
+                          .filter(ee.Filter.calendarRange(m, m, 'month'))
+                          .mean() 
+                          .set('year', y)
+                          .set('month', m)
+                          .set('system:time_start', ee.Date.fromYMD(y, m, 1));
+        return w;
+      });
+    }).flatten()
+  );
+  return byMonthYear;
+};
+var monthlyNIRAlbedo = getMonthlyMean(niralbedo);
+var niralbedoChart = ui.Chart.image.series({
+  imageCollection: monthlyNIRAlbedo,
+  region: table,
+  reducer: ee.Reducer.mean(),
+  scale: 10000, 
+  xProperty: 'system:time_start' 
+}).setOptions({
+  title: 'Average Monthly NIR Albedo',
+  vAxis: {title: '(%)'},
+  hAxis: {title: 'Time'},
+  lineWidth: 1,
+  pointSize: 3,
+  series: {0: {color: 'BCBCBC'}} 
+});
+print(niralbedoChart);
+var globalDLSTStats = monthlyDLST.reduce(ee.Reducer.minMax());
+var globalDLSTMax = globalDLSTStats.reduceRegion({
+  reducer: ee.Reducer.max(),
+  geometry: table,
+  scale: 10000, 
+  maxPixels: 1e13
+}).get('daytime LST_max');
+var globalDLSTMin = globalDLSTStats.reduceRegion({
+  reducer: ee.Reducer.min(),
+  geometry: table,
+  scale: 10000, 
+  maxPixels: 1e13
+}).get('daytime LST_min');
+globalDLSTMax = ee.Number(globalDLSTMax);
+globalDLSTMin = ee.Number(globalDLSTMin);
+var tciCollection = monthlyDLST.map(function(image) {
+  var tci = image.expression(
+    "(globalMax - LST) / (globalMax - globalMin) * 100", {
+      'LST': image,
+      'globalMin': globalDLSTMin,
+      'globalMax': globalDLSTMax
+    }
+  ).rename('TCI');
+  return tci.copyProperties(image, ['system:time_start']);
+});
+var tciChart = ui.Chart.image.series({
+  imageCollection: ee.ImageCollection(tciCollection), 
+  region: table, 
+  reducer: ee.Reducer.mean(),
+  scale: 10000, 
+}).setOptions({
+  title: 'Monthly TCI based on Daytime LST',
+  vAxis: {title: '(%)'},
+  hAxis: {title: 'Time'},
+  lineWidth: 1,
+  pointSize: 3,
+  series: {0: {color: 'CC5600'}}
+});
+print(tciChart);
+var globalNLSTStats = monthlyNLST.reduce(ee.Reducer.minMax());
+var globalNLSTMax = globalNLSTStats.reduceRegion({
+  reducer: ee.Reducer.max(),
+  geometry: table,
+  scale: 10000,
+  maxPixels: 1e13
+}).get('nighttime LST_max');
+var globalNLSTMin = globalNLSTStats.reduceRegion({
+  reducer: ee.Reducer.min(),
+  geometry: table,
+  scale: 10000,
+  maxPixels: 1e13
+}).get('nighttime LST_min');
+globalNLSTMax = ee.Number(globalNLSTMax);
+globalNLSTMin = ee.Number(globalNLSTMin);
+var tciNLSTCollection = monthlyNLST.map(function(image) {
+  var tci = image.expression(
+    "(globalMax - LST) / (globalMax - globalMin) * 100", {
+      'LST': image,
+      'globalMin': globalNLSTMin,
+      'globalMax': globalNLSTMax
+    }
+  ).rename('TCI');
+  return tci.copyProperties(image, ['system:time_start']);
+});
+var tciNLSTChart = ui.Chart.image.series({
+  imageCollection: ee.ImageCollection(tciNLSTCollection), 
+  region: table, 
+  reducer: ee.Reducer.mean(),
+  scale: 10000
+}).setOptions({
+  title: 'Monthly TCI based on Nighttime LST',
+  vAxis: {title: '(%)'},
+  hAxis: {title: 'Time'},
+  lineWidth: 1,
+  pointSize: 3,
+  series: {0: {color: 'CC5600'}}
+});
+print(tciNLSTChart);
+var monthlyNDVIStats = monthlyNDVI.reduce(ee.Reducer.minMax());
+var ndviMax = monthlyNDVIStats.reduceRegion({
+  reducer: ee.Reducer.max(),
+  geometry: table,
+  scale: 10000,
+  maxPixels: 1e13
+}).get('NDVI_max');
+var ndviMin = monthlyNDVIStats.reduceRegion({
+  reducer: ee.Reducer.min(),
+  geometry: table,
+  scale: 10000,
+  maxPixels: 1e13
+}).get('NDVI_min');
+ndviMax = ee.Number(ndviMax);
+ndviMin = ee.Number(ndviMin);
+var vciCollection = monthlyNDVI.map(function(image) {
+  var vci = image.expression(
+    "(NDVI - ndviMin) / (ndviMax - ndviMin) * 100", {
+      'NDVI': image,
+      'ndviMin': ndviMin,
+      'ndviMax': ndviMax
+    }
+  ).rename('VCI');
+  return vci.set('system:time_start', image.get('system:time_start'));
+});
+var chartVCI = ui.Chart.image.series(vciCollection, table, ee.Reducer.mean(), 10000, 'system:time_start')
+  .setChartType('LineChart')
+  .setOptions({
+    title: 'Average Monthly VCI',
+    vAxis: {title: '%'},
+    hAxis: {title: 'Month'},
+    lineWidth: 1,
+    pointSize: 3,
+    series: {0: {color: 'FFEA00'}}
+  });
+print(chartVCI);
+var vhiCollectionDay = monthlyNDVI.map(function(ndviImage) {
+  var date = ndviImage.get('system:time_start');
+  var tciDayImage = tciCollection.filter(ee.Filter.equals('system:time_start', date)).first();
+  var vciImage = vciCollection.filter(ee.Filter.equals('system:time_start', date)).first();
+  var vhiDay = vciImage.multiply(0.5).add(tciDayImage.multiply(0.5)).rename('VHI Day');
+  return vhiDay.set('system:time_start', date);
+});
+var chartVHIDay = ui.Chart.image.series(vhiCollectionDay, table, ee.Reducer.mean(), 10000).setOptions({
+  title: 'Average Monthly VHI Based on Daytime TCI',
+  vAxis: {title: '%'},
+  hAxis: {title: 'Month'},
+  lineWidth: 1,
+  pointSize: 3,
+  series: {0: {color: '2AAE98'}}
+});
+print(chartVHIDay);
+var vhiCollectionNight = monthlyNDVI.map(function(ndviImage) {
+  var date = ndviImage.get('system:time_start');
+  var tciNightImage = tciNLSTCollection.filter(ee.Filter.equals('system:time_start', date)).first();
+  var vciImage = vciCollection.filter(ee.Filter.equals('system:time_start', date)).first();
+  var vhiNight = vciImage.multiply(0.5).add(tciNightImage.multiply(0.5)).rename('VHI Night');
+  return vhiNight.set('system:time_start', date);
+});
+var chartVHINight = ui.Chart.image.series(vhiCollectionNight, table, ee.Reducer.mean(), 10000).setOptions({
+  title: 'Average Monthly VHI Based on Nighttime TCI',
+  vAxis: {title: '%'},
+  hAxis: {title: 'Month'},
+  lineWidth: 1,
+  pointSize: 3,
+  series: {0: {color: '2AAE98'}}
+});
+print(chartVHINight);
+var vhiCollectionDayNight = monthlyNDVI.map(function(ndviImage) {
+  var date = ndviImage.get('system:time_start');
+  var tciDayImage = tciCollection.filter(ee.Filter.equals('system:time_start', date)).first();
+  var tciNightImage = tciNLSTCollection.filter(ee.Filter.equals('system:time_start', date)).first();
+  var vciImage = vciCollection.filter(ee.Filter.equals('system:time_start', date)).first();
+  var vhiDay = vciImage.multiply(0.5).add(tciDayImage.multiply(0.25)).add(tciNightImage.multiply(0.25)).rename('VHI');
+  return vhiDay.set('system:time_start', date);
+});
+var chartVHIDayNight = ui.Chart.image.series(vhiCollectionDayNight, table, ee.Reducer.mean(), 10000).setOptions({
+  title: 'Average Monthly VHI Based on Combined Daytime and Nighttime TCI',
+  vAxis: {title: '%'},
+  hAxis: {title: 'Month'},
+  lineWidth: 1,
+  pointSize: 3,
+  series: {0: {color: '2AAE98'}}
+});
+print(chartVHIDayNight);
+var friCollectionDay = vciCollection.map(function(vciImage) {
+  var date = vciImage.get('system:time_start');
+  var tciDayImage = tciCollection.filter(ee.Filter.equals('system:time_start', date)).first();
+  var vhiDayImage = vhiCollectionDay.filter(ee.Filter.equals('system:time_start', date)).first();
+  var friDay = ee.Image.constant(1).subtract(vciImage.divide(100))
+          .add(ee.Image.constant(1).subtract(tciDayImage.divide(100)))
+          .add(ee.Image.constant(1).subtract(vhiDayImage.divide(100)))
+          .divide(3)
+          .multiply(100)
+          .rename('FRI Day');
+  return friDay.set('system:time_start', date);
+});
+var chartFRIDay = ui.Chart.image.series(friCollectionDay, table, ee.Reducer.mean(), 10000).setOptions({
+  title: 'Average Monthly FRI Based on Daytime VHI and TCI',
+  vAxis: {title: '%'},
+  hAxis: {title: 'Month'},
+  lineWidth: 1,
+  pointSize: 3,
+  series: {0: {color: 'FF0000'}}
+});
+var friCollectionNight = vciCollection.map(function(vciImage) {
+  var date = vciImage.get('system:time_start');
+  var tciNightImage = tciNLSTCollection.filter(ee.Filter.equals('system:time_start', date)).first();
+  var vhiNightImage = vhiCollectionNight.filter(ee.Filter.equals('system:time_start', date)).first();
+  var friNight = ee.Image.constant(1).subtract(vciImage.divide(100))
+          .add(ee.Image.constant(1).subtract(tciNightImage.divide(100)))
+          .add(ee.Image.constant(1).subtract(vhiNightImage.divide(100)))
+          .divide(3)
+          .multiply(100)
+          .rename('FRI Night');
+  return friNight.set('system:time_start', date);
+});
+var chartFRINight = ui.Chart.image.series(friCollectionNight, table, ee.Reducer.mean(), 10000).setOptions({
+  title: 'Average Monthly FRI Based on Nighttime VHI and TCI',
+  vAxis: {title: '%'},
+  hAxis: {title: 'Month'},
+  lineWidth: 1,
+  pointSize: 3,
+  series: {0: {color: 'FF0000'}}
+});
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+var friCollectionEnhanced = vciCollection.map(function(vciImage) {
+  var date = vciImage.get('system:time_start');
+  var tciDayImage = tciCollection.filter(ee.Filter.equals('system:time_start', date)).first();
+  var combinedVHIImage = vciImage.multiply(0.5).add(tciDayImage.multiply(0.25))
+    .add(tciNLSTCollection.filter(ee.Filter.equals('system:time_start', date)).first().multiply(0.25))
+    .rename('VHI Combined');
+  var precipitationImage = monthlyPrecipitation.filter(ee.Filter.equals('system:time_start', date)).first();
+  var laiImage = monthlyLAI.filter(ee.Filter.equals('system:time_start', date)).first();
+  var etImage = monthlyET.filter(ee.Filter.equals('system:time_start', date)).first();
+  var leImage = monthlyLE.filter(ee.Filter.equals('system:time_start', date)).first();
+  var niralbedoImage = monthlyNIRAlbedo.filter(ee.Filter.equals('system:time_start', date)).first();
+  var precipitationValue = ee.Number(precipitationImage.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: table,
+    scale: 10000,
+    maxPixels: 1e13
+  }).get('precipitation'));
+  var adjustedPrecipitation = precipitationValue.multiply(0.01);
+  var laiValue = ee.Number(laiImage.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: table,
+    scale: 10000,
+    maxPixels: 1e13
+  }).get('LAI'));
+  var etValue = ee.Number(etImage.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: table,
+    scale: 10000,
+    maxPixels: 1e13
+  }).get('ET'));
+  var leValue = ee.Number(leImage.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: table,
+    scale: 10000,
+    maxPixels: 1e13
+  }).get('LE'));
+  var niralbedoValue = ee.Number(niralbedoImage.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: table,
+    scale: 10000,
+    maxPixels: 1e13
+  }).get('NIR Albedo'));
+  var friEnhanced = ee.Image.constant(1).subtract(vciImage.divide(100))
+    .add(ee.Image.constant(1).subtract(tciDayImage.divide(100)))
+    .add(ee.Image.constant(1).subtract(combinedVHIImage.divide(100)))
+    .subtract(adjustedPrecipitation)
+    .add(laiValue.multiply(-0.02))
+    .add(etValue.multiply(-0.02))
+    .add(leValue.multiply(-0.02))
+    .add(niralbedoValue.multiply(-0.02))
+    .divide(7) 
+    .multiply(100)
+    .rename('FRI Enhanced');
+  return friEnhanced.set('system:time_start', date);
+});
+var chartFRIEnhanced = ui.Chart.image.series(friCollectionEnhanced, table, ee.Reducer.mean(), 10000).setOptions({
+  title: 'Enhanced Monthly FRI with Additional Factors',
+  vAxis: {title: '%'},
+  hAxis: {title: 'Month'},
+  lineWidth: 1,
+  pointSize: 3,
+  series: {0: {color: 'FF0000'}}
+});
+print(chartFRIEnhanced);
