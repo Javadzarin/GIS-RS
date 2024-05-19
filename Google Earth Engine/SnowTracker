@@ -1,0 +1,87 @@
+var panel = ui.Panel({style: {width: '600px'}});
+var instructionLabel = ui.Label('Instructions: Zoom into your area of interest (pixel size of this product is 500m.), then click on the target area. Hit the "Run Analysis" button to see results. You can move to a new location, click again, and hit the button to analyze the new location.');
+
+var startDateBox = ui.Textbox({value: '2023-01-01'});
+var endDateBox = ui.Textbox({value: '2023-12-31'});
+var runButton = ui.Button('Run Analysis');
+
+panel.add(instructionLabel);
+panel.add(startDateBox);
+panel.add(endDateBox);
+panel.add(runButton);
+
+ui.root.insert(0, panel);
+
+var selectedPoint;
+
+Map.onClick(function(coords) {
+  Map.layers().reset();
+  selectedPoint = ee.Geometry.Point([coords.lon, coords.lat]);
+  Map.layers().add(ui.Map.Layer(selectedPoint, {color: 'FF0000'}));
+});
+
+runButton.onClick(function() {
+  if (selectedPoint) {
+    var start_date = startDateBox.getValue();
+    var end_date = endDateBox.getValue();
+    var dataset = ee.ImageCollection('MODIS/061/MOD10A1')
+      .filter(ee.Filter.date(start_date, end_date))
+      .select('NDSI_Snow_Cover');
+    
+    var snowCoverPercentage = dataset.map(function(image) {
+      var value = image.reduceRegion({
+        reducer: ee.Reducer.first(),
+        geometry: selectedPoint,
+        scale: 500
+      });
+      var snowCover = ee.Number(value.get('NDSI_Snow_Cover'));
+      return snowCover.gt(0) ? ee.Feature(null, {
+        date: image.date().format('YYYY-MM-dd'),
+        snowCover: snowCover
+      }) : null;
+    }).filter(ee.Filter.notNull(['snowCover']));
+    
+    var dates = snowCoverPercentage.aggregate_array('date');
+    var snowCovers = snowCoverPercentage.aggregate_array('snowCover');
+    
+    dates.evaluate(function(datesList) {
+      snowCovers.evaluate(function(snowCoversList) {
+        var chart = ui.Chart.array.values(snowCoversList, 0, datesList).setOptions({
+          title: 'Daily Snow Cover Percentage (' + start_date + ' to ' + end_date + ')',
+          hAxis: {title: 'Date'},
+          vAxis: {title: 'Snow Cover Percentage (%)'},
+          lineWidth: 1,
+          pointSize: 3,
+          series: {0: {color: '1d6b99'}},
+          legend: {position: 'none'}
+        });
+        
+        panel.clear();
+        panel.add(startDateBox);
+        panel.add(endDateBox);
+        panel.add(runButton);
+        panel.add(chart);
+        
+        var stats = {
+          mean: ee.Array(snowCoversList).reduce(ee.Reducer.mean(), [0]).get([0]),
+          median: ee.Array(snowCoversList).reduce(ee.Reducer.median(), [0]).get([0]),
+          stdDev: ee.Array(snowCoversList).reduce(ee.Reducer.stdDev(), [0]).get([0]),
+          min: ee.Array(snowCoversList).reduce(ee.Reducer.min(), [0]).get([0]),
+          max: ee.Array(snowCoversList).reduce(ee.Reducer.max(), [0]).get([0])
+        };
+        
+        panel.add(ui.Label('Mean Snow Cover Percentage: ' + ee.Number(stats.mean).format('%.2f').getInfo() + '%'));
+        panel.add(ui.Label('Median Snow Cover Percentage: ' + ee.Number(stats.median).format('%.2f').getInfo() + '%'));
+        panel.add(ui.Label('Standard Deviation: ' + ee.Number(stats.stdDev).format('%.2f').getInfo() + '%'));
+        panel.add(ui.Label('Minimum Snow Cover Percentage: ' + ee.Number(stats.min).format('%.2f').getInfo() + '%'));
+        panel.add(ui.Label('Maximum Snow Cover Percentage: ' + ee.Number(stats.max).format('%.2f').getInfo() + '%'));
+      });
+    });
+  } else {
+    panel.clear();
+    panel.add(startDateBox);
+    panel.add(endDateBox);
+    panel.add(runButton);
+    panel.add(ui.Label('No location selected.'));
+  }
+});
