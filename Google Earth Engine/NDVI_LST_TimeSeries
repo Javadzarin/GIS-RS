@@ -1,0 +1,93 @@
+var instructionLabel = ui.Label('Steps: 1) Run the script. 2) Use the drawing tool to draw a point or polygon. 3) Set your date range. 4) Select your product (NDVI or LST). 5) Hit the "Generate Chart" button.', {fontWeight: 'bold'});
+var startDateLabel = ui.Label('Start Date (YYYY-MM-DD):');
+var startDateTextBox = ui.Textbox({value: '2001-01-01'});
+var endDateLabel = ui.Label('End Date (YYYY-MM-DD):');
+var endDateTextBox = ui.Textbox({value: '2023-12-31'});
+var productLabel = ui.Label('Select Product:');
+var ndviCheckBox = ui.Checkbox({label: 'NDVI', value: true});
+var lstCheckBox = ui.Checkbox({label: 'LST', value: false});
+var submitButton = ui.Button({
+    label: 'Generate Chart',
+    onClick: function() {
+        var geometry = Map.drawingTools().layers().get(0).toGeometry();
+        processAndVisualize(geometry);
+    }
+});
+
+function processAndVisualize(geometry) {
+    Map.clear();
+    Map.addLayer(geometry, {}, 'Analysis Geometry');
+    Map.centerObject(geometry, 10);
+    var startDate = startDateTextBox.getValue();
+    var endDate = endDateTextBox.getValue();
+    var startYear = parseInt(startDate.split('-')[0]);
+    var endYear = parseInt(endDate.split('-')[0]);
+    var products = {
+        'NDVI': {
+            collection: 'MODIS/061/MOD13A2',
+            band: 'NDVI',
+            scale: 0.0001,
+            offset: 0,
+            color: '00FF00'
+        },
+        'LST': {
+            collection: 'MODIS/061/MOD11A2',
+            band: 'LST_Day_1km',
+            scale: 0.02,
+            offset: -273.15,
+            color: 'FF0000'
+        }
+    };
+
+    Object.keys(products).forEach(function(key) {
+        if ((key === 'NDVI' && ndviCheckBox.getValue()) || (key === 'LST' && lstCheckBox.getValue())) {
+            var product = products[key];
+            var dataset = ee.ImageCollection(product.collection)
+                .filter(ee.Filter.date(startDate, endDate))
+                .filterBounds(geometry)
+                .select(product.band);
+
+            var monthlyAverages = ee.ImageCollection.fromImages(
+                ee.List.sequence(startYear, endYear).map(function (year) {
+                    return ee.List.sequence(1, 12).map(function(month) {
+                        return dataset.filter(ee.Filter.calendarRange(year, year, 'year'))
+                            .filter(ee.Filter.calendarRange(month, month, 'month'))
+                            .mean()
+                            .set('system:time_start', ee.Date.fromYMD(year, month, 1).millis())
+                            .set('month', month)
+                            .set('year', year);
+                    });
+                }).flatten()
+            ).map(function(image) {
+                return image.multiply(product.scale).add(product.offset)
+                            .set('system:time_start', image.get('system:time_start'));
+            });
+
+            var chart = ui.Chart.image.series(monthlyAverages, geometry, ee.Reducer.mean(), 500)
+                .setOptions({
+                    title: 'Monthly Average ' + key,
+                    vAxis: {title: key},
+                    hAxis: {title: 'Date'},
+                    series: {0: {color: product.color}}
+                });
+            print(chart);
+        }
+    });
+}
+
+var panel = ui.Panel({
+    widgets: [
+        instructionLabel,
+        startDateLabel,
+        startDateTextBox,
+        endDateLabel,
+        endDateTextBox,
+        productLabel,
+        ndviCheckBox,
+        lstCheckBox,
+        submitButton
+    ], 
+    style: {width: '400px'}
+});
+ui.root.add(panel);
+Map.drawingTools().setLinked(false);
