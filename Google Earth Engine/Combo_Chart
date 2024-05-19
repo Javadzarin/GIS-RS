@@ -1,0 +1,105 @@
+var areaOfInterest = ee.Geometry.Point([/* Add coordinates here */]);
+
+var year = 2019;
+
+var precipitation = ee.ImageCollection('UCSB-CHG/CHIRPS/PENTAD');
+
+var months = ee.List.sequence(1, 12);
+
+var createMonthlyImage = function(month) {
+  var yearStartDate = ee.Date.fromYMD(year, 1, 1);
+  var monthStartDate = ee.Date.fromYMD(year, month, 1);
+  var monthEndDate = monthStartDate.advance(1, 'month');
+  
+  var monthTotal = precipitation
+    .filter(ee.Filter.date(monthStartDate, monthEndDate))
+    .reduce(ee.Reducer.sum()).rename('monthly');
+  
+  var monthCumulative = precipitation
+    .filter(ee.Filter.date(yearStartDate, monthEndDate))
+    .reduce(ee.Reducer.sum()).rename('cumulative');
+  
+  var image = ee.Image.cat([monthTotal, monthCumulative]);
+  return image.set({
+    'system:time_start': monthStartDate.millis(),
+    'system:time_end': monthEndDate.millis(),
+    'year': year,
+    'month': month,
+  });
+};
+
+var monthlyImages = months.map(createMonthlyImage);
+
+var monthlyCollection = ee.ImageCollection.fromImages(monthlyImages);
+print(monthlyCollection);
+
+var chart = ui.Chart.image.series({
+  imageCollection: monthlyCollection,
+  region: areaOfInterest,
+  reducer: ee.Reducer.mean(),
+  scale: 5566,
+}).setChartType('ComboChart')
+  .setOptions({
+      title: 'Monthly and Cumulative Rainfall for ' + year,
+      hAxis: {
+        title: 'Month',
+        titleTextStyle: {fontSize: 18},
+        format: 'MMM',
+        ticks: [
+          new Date(2019, 0),
+          new Date(2019, 1),
+          new Date(2019, 2),
+          new Date(2019, 3),
+          new Date(2019, 4),
+          new Date(2019, 5),
+          new Date(2019, 6),
+          new Date(2019, 7),
+          new Date(2019, 8),
+          new Date(2019, 9),
+          new Date(2019, 10),
+          new Date(2019, 11),
+          new Date(2019, 12),
+        ]
+      },
+      vAxes: {
+        0: {
+          title: 'Monthly Rainfall Depth (mm)', 
+          gridlines: {color: 'none'},
+          viewWindow: {min:0, max: 1200}
+        },
+        1: {
+          title: 'Cumulative Rainfall Depth (mm)', 
+          viewWindow: {min:0, max: 1200},
+          
+        },
+      },
+      seriesType: 'line',
+      series: {
+        0: {
+          type: 'line',
+          pointShape: 'triangle',
+          pointSize: 5,
+          lineWidth: 1,
+          lineDashStyle: [4, 4],
+          color: '#252525',
+          targetAxisIndex: 1
+        },
+        1: {
+          type: 'bars',
+          color: '#737373',
+          targetAxisIndex: 0
+        },
+      },
+      legend: {
+        position: 'top',
+        alignment: 'end'
+      },
+      backgroundColor: {
+          strokeWidth: 1
+      },
+      chartArea: {
+        width: '80%',
+        height: '80%'
+      }
+});
+print(chart);
