@@ -1,0 +1,224 @@
+Map.centerObject(table);
+Map.addLayer(table);
+
+var soilMoisture = function(img){
+  var bands = img.select('SoilMoi0_10cm_inst').clip(table);
+  return bands.copyProperties(img,['system:time_start','system:time_end']);
+};
+
+var soilMoisture25km = ee.ImageCollection("NASA/GLDAS/V021/NOAH/G025/T3H")
+.filterDate('2020-01-01','2020-12-31')
+.filterBounds(table)
+.map(soilMoisture)
+.mean().toInt()
+.rename('soilMoisture');
+
+print('soilMoisture25km',soilMoisture25km);
+
+Map.addLayer(soilMoisture25km,{
+  palette: ['1303ff', '42fff6', 'f3ff40', 'ff5d0f']
+}, 'soilMoisture25km',false);
+
+
+Export.image.toDrive({
+  image: soilMoisture25km,
+  description: 'soilMoisture25km',
+  scale: 25000,
+  maxPixels: 1e13,
+  crs: soilMoisture25km.getInfo().crs,
+  region: table
+});
+
+
+// modis products
+
+var NDVI = function(img){
+  var bands = img.select('NDVI','EVI').multiply(0.0001).clip(table);
+  return bands.copyProperties(img,['system:time_start','system:time_end']);
+};
+
+var LAI = function(img){
+  var bands = img.select('Lai_500m').multiply(0.1).clip(table);
+  return bands.copyProperties(img,['system:time_start','system:time_end']);
+};
+
+var LST = function(img){
+  var bands = img.select('LST_Day_1km').multiply(0.02).clip(table);
+  return bands.copyProperties(img,['system:time_start','system:time_end']);
+};
+
+var NDWI = function(img){
+  var bands = img.select('sur_refl_b04','sur_refl_b02').multiply(0.0001).clip(table);
+  var index = bands.normalizedDifference(['sur_refl_b04','sur_refl_b02']).rename('ndwi');
+  return bands.addBands(index)
+  .copyProperties(img,['system:time_start','system:time_end']);
+};
+
+
+var modisNDVI = ee.ImageCollection("MODIS/006/MOD13Q1")
+.filterDate('2020-01-01','2020-12-31')
+.filterBounds(table)
+.map(NDVI)
+.mean();
+
+Map.addLayer(modisNDVI.select('NDVI'),{
+    palette: [
+    'FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718', '74A901',
+    '66A000', '529400', '3E8601', '207401', '056201', '004C00', '023B01',
+    '012E01', '011D01', '011301'
+  ]
+}, 'modisNDVI',false);
+
+
+var modisLAI = ee.ImageCollection("MODIS/006/MOD15A2H")
+.filterDate('2020-01-01','2020-12-31')
+.filterBounds(table)
+.map(LAI)
+.mean();
+
+Map.addLayer(modisLAI,{
+      palette: [
+    'FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718', '74A901',
+    '66A000', '529400', '3E8601', '207401', '056201', '004C00', '023B01',
+    '012E01', '011D01', '011301'
+  ]
+}, 'modisLAI',false);
+
+
+
+var modisLST = ee.ImageCollection("MODIS/006/MOD11A2")
+.filterDate('2020-01-01','2020-12-31')
+.filterBounds(table)
+.map(LST)
+.mean();
+
+Map.addLayer(modisLST,{
+  palette: [
+    '040274', '040281', '0502a3', '0502b8', '0502ce', '0502e6',
+    '0602ff', '235cb1', '307ef3', '269db1', '30c8e2', '32d3ef',
+    '3be285', '3ff38f', '86e26f', '3ae237', 'b5e22e', 'd6e21f',
+    'fff705', 'ffd611', 'ffb613', 'ff8b13', 'ff6e08', 'ff500d',
+    'ff0000', 'de0101', 'c21301', 'a71001', '911003'
+  ]
+}, 'modisLST',false);
+
+
+var modisNDWI = ee.ImageCollection("MODIS/006/MOD09A1")
+.filterDate('2020-01-01','2020-12-31')
+.filterBounds(table)
+.map(NDWI)
+.mean();
+
+
+Map.addLayer(modisNDWI.select('ndwi'),{
+  palette: ['white','blue']
+}, 'modisNDWI',false);
+
+
+var modisLandCover = ee.ImageCollection("MODIS/006/MCD12Q1")
+.filterDate('2020-01-01','2020-12-31')
+.filterBounds(table)
+.select('LC_Type2')
+.toBands().clip(table);
+
+
+Map.addLayer(modisLandCover,{ min:0, max: 15,
+  palette: [
+    '05450a', '086a10', '54a708', '78d203', '009900', 'c6b044', 'dcd159',
+    'dade48', 'fbff13', 'b6ff05', '27ff87', 'c24f44', 'a5a5a5', 'ff6d4c',
+    '69fff8', 'f9ffa4', '1c0dff'
+  ]
+}, 'modisLandCover',false);
+
+
+var modisDataset = ee.Image.cat([modisNDVI, modisLAI, modisLST, modisNDWI, modisLandCover]);
+
+print('modisDataset',modisDataset);
+
+
+// RADAR data
+
+var sen1 = ee.ImageCollection("COPERNICUS/S1_GRD")
+.filterDate('2020-01-01','2020-12-31')
+.filterBounds(table)
+.filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VV'))
+.filter(ee.Filter.eq('instrumentMode','IW'))
+.select('VV')
+.mean().clip(table);
+
+
+var backScatter = function(img){
+  var sigma = ee.Image(10).pow(img.divide(10.0));
+  var speckel = sigma.focal_median(30, 'circle', 'meters').rename('radar');
+  return speckel;
+};
+
+var radar = backScatter(sen1);
+
+Map.addLayer(radar,[],'radar',false);
+
+// elevation
+
+var dem = ee.Image("USGS/GTOPO30")
+.clip(table).rename('dem');
+
+var slope = ee.Terrain.slope(dem).rename('slope');
+
+
+var elevation = ee.Image.cat([dem, slope]);
+
+print('elevationData',elevation);
+
+Map.addLayer(elevation,[],'elevation',false);
+
+
+// data stacking
+
+
+var dataset = modisDataset.addBands(radar).addBands(elevation);
+
+print('dataset',dataset);
+
+var datasetMap = dataset.addBands(soilMoisture25km);
+
+print('datasetMap',datasetMap);
+
+
+// modelling
+
+var bandNames = dataset.bandNames();
+
+print('bandNames',bandNames);
+
+var trainingData = datasetMap.stratifiedSample({
+  numPoints: 100,
+  classBand: 'soilMoisture',
+  region: table,
+  scale: 1000
+});
+  
+  
+var classifier = ee.Classifier.smileRandomForest(80).train({
+  features: trainingData,
+  classProperty: 'soilMoisture',
+  inputProperties: bandNames
+});
+
+
+var soilMoisture1km = dataset.classify(classifier);
+
+print('soilMoisture1km',soilMoisture1km)
+
+Map.addLayer(soilMoisture1km,{
+  palette: ['1303ff', '42fff6', 'f3ff40', 'ff5d0f']
+}, 'soilMoisture1km',false);
+
+
+Export.image.toDrive({
+  image: soilMoisture1km,
+  description: 'soilMoisture1km',
+  scale: 1000,
+  maxPixels: 1e13,
+  crs: soilMoisture1km.getInfo().crs,
+  region: table
+});
