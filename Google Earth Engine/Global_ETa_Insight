@@ -1,0 +1,77 @@
+var startDateInput = ui.Textbox({value: '2001-01-01', placeholder: 'Start Date YYYY-MM-DD'});
+var endDateInput = ui.Textbox({value: '2024-03-31', placeholder: 'End Date YYYY-MM-DD'});
+var infoLabel = ui.Label('This educational and research-focused GEE application provides easy access to monthly ET time series line charts from the MODIS product MOD16A2, covering global data from January 2001 to March 2024 at a spatial resolution of 1000m. To use, zoom into your area of interest, set your favorite date range, then click ONCE on the map, and wait approximately one minute to view the ET time series line chart(s) for your selected date range and location. You can try it for new locations as much as you may require. You can export the time series line charts using the arrow icon at the top right of each chart(s).');
+var chartPanel = ui.Panel({style: {width: '100%', height: '250px', padding: '0px'}});
+
+var resolutionCheckboxes = ui.Panel([
+    ui.Checkbox('1000m', true)
+], ui.Panel.Layout.flow('horizontal'));
+
+var panel = ui.Panel({
+  widgets: [infoLabel, startDateInput, endDateInput, resolutionCheckboxes, chartPanel],
+  style: {width: '1500px', padding: '8px', backgroundColor: '#f0f0f0', position: 'bottom-left'}
+});
+
+Map.add(panel);
+Map.setControlVisibility({layerList: false});
+
+function updateChart(coords) {
+  var buffer = ee.Geometry.Point([coords.lon, coords.lat]).buffer(10000); 
+  Map.layers().reset();
+  var point = ee.Geometry.Point([coords.lon, coords.lat]);
+  var startDate = ee.Date(startDateInput.getValue());
+  var endDate = ee.Date(endDateInput.getValue());
+
+  var resolutions = {
+    '1000m': {collection: 'MOD16A2', scale: 1000, band: 'ET', multiplier: 0.1}
+  };
+
+  chartPanel.clear();
+  var charts = [];
+
+  resolutionCheckboxes.widgets().forEach(function(checkbox) {
+    if (checkbox.getValue()) {
+      var resDetails = resolutions[checkbox.getLabel()];
+      var et = ee.ImageCollection("MODIS/NTSG/MOD16A2/105")
+        .select(resDetails.band)
+        .filterBounds(buffer)
+        .filterDate(startDate, endDate)
+        .map(function(img) {
+          return img.multiply(resDetails.multiplier).set('system:time_start', img.get('system:time_start'));
+        });
+
+      var months = ee.List.sequence(0, endDate.difference(startDate, 'month').subtract(1));
+      var monthlyET = ee.ImageCollection.fromImages(
+        months.map(function (m) {
+          var start = startDate.advance(m, 'month');
+          var end = start.advance(1, 'month');
+          return et.filterDate(start, end).mean()
+            .set('system:time_start', start.millis());
+        })
+      );
+
+      var chartTitle = 'Monthly ET Time Series at ' + checkbox.getLabel() + ' for ' + coords.lon.toFixed(6) + ', ' + coords.lat.toFixed(6) + ' from ' + startDate.format('YYYY-MM-dd').getInfo() + ' to ' + endDate.format('YYYY-MM-dd').getInfo();
+      var chart = ui.Chart.image.series(monthlyET, point, ee.Reducer.mean(), resDetails.scale)
+        .setOptions({
+          title: chartTitle,
+          vAxis: {title: 'ET (kg/m^2)'},
+          hAxis: {title: 'Date'},
+          lineWidth: 2,
+          pointSize: 4,
+          colors: ['#00c853']
+        });
+      charts.push(chart);
+    }
+  });
+
+  charts.forEach(function(chart) {
+    chartPanel.add(chart);
+  });
+
+  Map.addLayer(point, {color: 'red'}, 'Selected Location');
+  infoLabel.setValue('Click on the map to update the chart. Selected location: Longitude ' + coords.lon.toFixed(6) + ', Latitude ' + coords.lat.toFixed(6));
+}
+
+Map.onClick(function(coords) {
+  updateChart(coords);
+});
