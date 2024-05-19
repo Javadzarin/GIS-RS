@@ -1,0 +1,79 @@
+var startDateInput = ui.Textbox({value: '2001-01-01', placeholder: 'Start Date YYYY-MM-DD'});
+var endDateInput = ui.Textbox({value: '2024-03-31', placeholder: 'End Date YYYY-MM-DD'});
+var infoLabel = ui.Label('This educational and research-focused GEE application provides easy access to monthly NDVI time series line charts from MODIS products (MOD13Q1, MOD13A1, MOD13A2), covering global data from January 2001 to March 2024 across three spatial resolutions: 250 m, 500 m, and 1000 m. To use, zoom into your area of interest, next set your favorite date range, after that click ONCE on the map, and wait approximately one minute to view the NDVI time series line chart(s) for your selected date range, resolution(s) and location. You can try it for new locations as much as you may require. You can export the time series line charts using the arrow icon at the top right of each chart(s). Iman Javadzarin');
+var chartPanel = ui.Panel({style: {width: '100%', height: '250px', padding: '0px'}});
+
+var resolutionCheckboxes = ui.Panel([
+    ui.Checkbox('250m (MOD13Q1)', true),
+    ui.Checkbox('500m (MOD13A1)', false),
+    ui.Checkbox('1000m (MOD13A2)', false)
+], ui.Panel.Layout.flow('horizontal'));
+
+var panel = ui.Panel({
+  widgets: [infoLabel, startDateInput, endDateInput, resolutionCheckboxes, chartPanel],
+  style: {width: '1500px', padding: '8px', backgroundColor: '#f0f0f0', position: 'bottom-left'}
+});
+
+Map.add(panel);
+Map.setControlVisibility({layerList: false});
+
+function updateChart(coords) {
+  Map.layers().reset();
+  var point = ee.Geometry.Point([coords.lon, coords.lat]);
+  var startDate = ee.Date(startDateInput.getValue());
+  var endDate = ee.Date(endDateInput.getValue());
+
+  var resolutions = {
+    '250m (MOD13Q1)': 'MOD13Q1',
+    '500m (MOD13A1)': 'MOD13A1',
+    '1000m (MOD13A2)': 'MOD13A2'
+  };
+
+  chartPanel.clear();
+  var charts = [];
+
+  resolutionCheckboxes.widgets().forEach(function(checkbox) {
+    if (checkbox.getValue()) {
+      var res = resolutions[checkbox.getLabel()];
+      var scale = parseInt(checkbox.getLabel().split(' ')[0].replace('m', ''));
+      var ndvi = ee.ImageCollection("MODIS/061/" + res).select('NDVI')
+        .filterDate(startDate, endDate)
+        .map(function(img) {
+          return img.multiply(0.0001).set('system:time_start', img.get('system:time_start'));
+        });
+
+      var months = ee.List.sequence(0, endDate.difference(startDate, 'month').subtract(1));
+      var monthlyNDVI = ee.ImageCollection.fromImages(
+        months.map(function (m) {
+          var start = startDate.advance(m, 'month');
+          var end = start.advance(1, 'month');
+          return ndvi.filterDate(start, end).mean()
+            .set('system:time_start', start.millis());
+        })
+      );
+
+      var chartTitle = 'Monthly NDVI Time Series at ' + checkbox.getLabel() + ' for ' + coords.lon.toFixed(6) + ', ' + coords.lat.toFixed(6) + ' from ' + startDate.format('YYYY-MM-dd').getInfo() + ' to ' + endDate.format('YYYY-MM-dd').getInfo();
+      var chart = ui.Chart.image.series(monthlyNDVI, point, ee.Reducer.mean(), scale)
+        .setOptions({
+          title: chartTitle,
+          vAxis: {title: 'NDVI'},
+          hAxis: {title: 'Date'},
+          lineWidth: 2,
+          pointSize: 4,
+          colors: ['#00ff00']
+        });
+      charts.push(chart);
+    }
+  });
+
+  charts.forEach(function(chart) {
+    chartPanel.add(chart);
+  });
+
+  Map.addLayer(point, {color: 'red'}, 'Selected Location');
+  infoLabel.setValue('Click on the map to update the chart. Selected location: Longitude ' + coords.lon.toFixed(6) + ', Latitude ' + coords.lat.toFixed(6));
+}
+
+Map.onClick(function(coords) {
+  updateChart(coords);
+});
