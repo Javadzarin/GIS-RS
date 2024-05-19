@@ -1,0 +1,77 @@
+var areaOfInterest = ee.Geometry.Point([/* Add coordinates here */]);
+
+var NO2Collection = ee.ImageCollection('COPERNICUS/S5P/NRTI/L3_NO2');
+
+var timeZone = 'Asia/Kolkata';
+var startDate = ee.Date.fromYMD(2022, 4, 1, timeZone);
+var endDate = ee.Date.fromYMD(2022, 5, 1, timeZone);
+
+var NO2Filtered = NO2Collection
+  .filter(ee.Filter.date(startDate, endDate))
+  .filter(ee.Filter.bounds(areaOfInterest))
+  .select('tropospheric_NO2_column_number_density');
+
+var days = endDate.difference(startDate, 'day');
+var daysList = ee.List.sequence(0, days);
+
+var result = daysList.map(function(day) {
+  var dayStart = startDate.advance(day, 'day', timeZone);
+  var dayEnd = dayStart.advance(1, 'day', timeZone);
+  var dayFiltered = NO2Filtered.filter(ee.Filter.date(dayStart, dayEnd));
+  
+  var dayMeanImage = dayFiltered.mean().rename('no2');
+  var stats = dayMeanImage.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: areaOfInterest,
+    scale: 1113.2,
+    maxPixels: 1e10,
+    tileScale: 16
+  });
+  var dayMeanNO2 = ee.List([stats.get('no2', -9999), -9999])
+      .reduce(ee.Reducer.firstNonNull());
+  var feature = ee.Feature(areaOfInterest, {
+    'no2': dayMeanNO2,
+    'date': dayStart.format('YYYY-MM-dd', timeZone),
+    'system:time_start': dayStart.millis()
+  });
+  return feature;
+});
+
+var no2FeatureCollection = ee.FeatureCollection(result)
+  .filter(ee.Filter.neq('no2', -9999));
+
+print('Collection with Nulls Removed', no2FeatureCollection);
+
+var chart = ui.Chart.feature.byFeature({
+  features: no2FeatureCollection,
+  xProperty: 'system:time_start',
+  yProperties: ['no2']}) 
+  .setChartType('LineChart')
+  .setOptions({
+    interpolateNulls: false,
+    lineWidth: 2,
+    pointSize: 3,
+    series: {
+      0: {color: '#31a354'},
+    },
+    legend: 'none',
+    curveType: 'function',
+    title: 'NO2 Time-Series',
+    vAxis: {title: 'NO2 (mol/m^2)', viewWindow: {min:0}},
+    hAxis: {
+      title: '', 
+      slantedText: true,
+      slantedTextAngle: 90,
+      gridlines: {
+        units: {
+          days: {format: ['MM-dd']},
+        },
+      },
+      minorGridlines: {
+        count: 0
+      },
+    },
+    chartArea: {left: 150, right: 50}
+  });
+
+print(chart);
