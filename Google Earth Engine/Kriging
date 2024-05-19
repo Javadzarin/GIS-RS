@@ -1,0 +1,140 @@
+var startInput = ui.Textbox({value: '1981-01-01', placeholder: 'Start Date (YYYY-MM-DD)'});
+var endInput = ui.Textbox({value: '2023-12-31', placeholder: 'End Date (YYYY-MM-DD)'});
+var gaul = ee.FeatureCollection("FAO/GAUL/2015/level2");
+var geometry; // This will hold the selected geometry
+var kriging; // Declare kriging at the top to ensure it is accessible in both the Kriging and export functions
+
+// Kriging settings UI components with labels
+var shapeLabel = ui.Label('Shape of function:');
+var shapeSelect = ui.Select({
+  items: ['spherical', 'exponential', 'gaussian'],
+  value: 'gaussian',
+  placeholder: 'Select shape'
+});
+var shapePanel = ui.Panel([shapeLabel, shapeSelect], ui.Panel.Layout.flow('horizontal'));
+
+var rangeLabel = ui.Label('Range:');
+var rangeInput = ui.Textbox({value: '100000', placeholder: 'Range'});
+var rangePanel = ui.Panel([rangeLabel, rangeInput], ui.Panel.Layout.flow('horizontal'));
+
+var sillLabel = ui.Label('Sill:');
+var sillInput = ui.Textbox({value: '1.0', placeholder: 'Sill'});
+var sillPanel = ui.Panel([sillLabel, sillInput], ui.Panel.Layout.flow('horizontal'));
+
+var nuggetLabel = ui.Label('Nugget:');
+var nuggetInput = ui.Textbox({value: '0.1', placeholder: 'Nugget'});
+var nuggetPanel = ui.Panel([nuggetLabel, nuggetInput], ui.Panel.Layout.flow('horizontal'));
+
+var maxDistanceLabel = ui.Label('Max Distance:');
+var maxDistanceInput = ui.Textbox({value: '10000', placeholder: 'Max Distance'});
+var maxDistancePanel = ui.Panel([maxDistanceLabel, maxDistanceInput], ui.Panel.Layout.flow('horizontal'));
+
+function setSelectOptions(select, featureCollection, property) {
+  var uniqueValues = featureCollection.aggregate_array(property).distinct();
+  uniqueValues.evaluate(function(values) {
+    select.items().reset(values.sort());
+  });
+}
+
+var countrySelect = ui.Select({
+  placeholder: 'Select country',
+  onChange: function(selected) {
+    var filtered = gaul.filter(ee.Filter.eq('ADM0_NAME', selected));
+    setSelectOptions(level1Select, filtered, 'ADM1_NAME');
+  }
+});
+
+var level1Select = ui.Select({
+  placeholder: 'Select first-level administrative unit',
+  onChange: function(selected) {
+    var filtered = gaul.filter(ee.Filter.eq('ADM1_NAME', selected));
+    setSelectOptions(level2Select, filtered, 'ADM2_NAME');
+  }
+});
+
+var level2Select = ui.Select({
+  placeholder: 'Select second-level administrative unit'
+});
+
+// Initial population of country select
+setSelectOptions(countrySelect, gaul, 'ADM0_NAME');
+
+ui.root.add(ui.Panel([
+  countrySelect, 
+  level1Select, 
+  level2Select, 
+  startInput, 
+  endInput, 
+  shapePanel, 
+  rangePanel, 
+  sillPanel, 
+  nuggetPanel, 
+  maxDistancePanel
+], ui.Panel.Layout.flow('vertical')));
+
+var krigingButton = ui.Button('Run Kriging Interpolation');
+krigingButton.onClick(function() {
+  var selectedAdm2 = level2Select.getValue();
+  geometry = gaul.filter(ee.Filter.eq('ADM2_NAME', selectedAdm2)).geometry();
+  var chirps = ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
+                 .filterBounds(geometry)
+                 .filter(ee.Filter.date(startInput.getValue(), endInput.getValue()));
+  var precipitation = chirps.select('precipitation').sum().clip(geometry);
+  var samples = precipitation.addBands(ee.Image.pixelLonLat())
+                     .sample({region: geometry, numPixels: 500, scale: 1000, projection: 'EPSG:4326'})
+                     .map(function(sample) {
+                       var lat = sample.get('latitude');
+                       var lon = sample.get('longitude');
+                       var prec = sample.get('precipitation');
+                       return ee.Feature(ee.Geometry.Point([lon, lat]), {prec: prec});
+                     });
+
+  kriging = samples.kriging({
+    propertyName: 'prec',
+    shape: shapeSelect.getValue(),
+    range: parseFloat(rangeInput.getValue()),
+    sill: parseFloat(sillInput.getValue()),
+    nugget: parseFloat(nuggetInput.getValue()),
+    maxDistance: parseFloat(maxDistanceInput.getValue()),
+    reducer: 'mean'
+  });
+
+  var precipitationVis = {
+    min: 0,
+    max: 2000,
+    palette: ['#8b0000', // dark red
+ '#ff0000', // medium red
+ '#ff6347', // light red
+ '#ff8c00', // dark orange
+ '#ffa500', // medium orange
+ '#ffcc99', // light orange
+ '#cccc00', // dark yellow
+ '#ffff00', // medium yellow
+ '#ffff99', // light yellow
+ '#006400', // dark green
+ '#008000', // medium green
+ '#90ee90', // light green
+ '#4682b4', // dark blue
+ '#6495ed', // medium blue
+ '#add8e6'] // light blue
+  };
+  Map.addLayer(kriging.clip(geometry), precipitationVis, 'Interpolated Precipitation Kriging');
+});
+
+var exportButton = ui.Button('Export to Google Drive');
+exportButton.onClick(function() {
+  var selectedCountry = countrySelect.getValue();
+  var selectedAdm1 = level1Select.getValue();
+  var selectedAdm2 = level2Select.getValue();
+  var dateRange = startInput.getValue() + '_to_' + endInput.getValue();
+  var filename = selectedCountry + '_' + selectedAdm1 + '_' + selectedAdm2 + '_' + dateRange;
+  Export.image.toDrive({
+    image: kriging.clip(geometry),
+    description: filename,
+    fileNamePrefix: filename,
+    scale: 1000,
+    maxPixels: 1e12
+  });
+});
+
+ui.root.add(ui.Panel([krigingButton, exportButton]));
