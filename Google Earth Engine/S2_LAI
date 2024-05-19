@@ -1,0 +1,33 @@
+Map.centerObject(table);
+
+var sentinel = ee.ImageCollection("COPERNICUS/S2_SR")
+.filterBounds(table) 
+.filterDate('2018-01-01', '2023-12-31')
+.filter(ee.Filter.lessThan('CLOUDY_PIXEL_PERCENTAGE', 5))
+.map(function(img) {
+  var evi = img.expression(
+    '2.5 * ((nir - red) / (nir + 6.0 * red - 7.5 * blue + 1.0))', {
+      'nir': img.select('B8').divide(10000), // Near Infrared
+      'red': img.select('B4').divide(10000), // Red
+      'blue': img.select('B2').divide(10000) // Blue
+    });
+
+  var lai = evi.expression(
+    '3.618 * evi - 0.118', {
+      'evi': evi
+    });
+
+  return lai.copyProperties(img, ["system:time_start"]);
+})
+.mean()
+.clip(table);
+
+Map.addLayer(sentinel, {min: 0, max: 5, palette: ['ffff00', 'ffbb22', '00ff00']}, 'LAI Sentinel-2');
+
+Export.image.toDrive({
+  image: sentinel,
+  description: 'LAI_S2_mean_2018_2023',
+  scale: 10,
+  region: table,
+  maxPixels: 1e13
+});
