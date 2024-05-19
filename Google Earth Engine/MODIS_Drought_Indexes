@@ -1,0 +1,84 @@
+Map.centerObject(geometry);
+Map.addLayer(geometry); 
+var modveg = ee.ImageCollection('MODIS/006/MOD13A1')
+.filterBounds(geometry)
+.filterDate('2000-01-01','2000-12-31')
+.select('NDVI')
+.map(function(img){
+  return img.multiply(0.0001)
+  .copyProperties(img,['system:time_start','system:time_end']);
+});
+var vci = modveg.map(function(img){
+  
+  var min = img.reduceRegion(ee.Reducer.min(),geometry,500).get('NDVI');
+  var max = img.reduceRegion(ee.Reducer.max(),geometry,500).get('NDVI');
+  
+  var index = img.expression(
+    '(NDVI-min)/(max-min)'
+    ,{
+      'NDVI': img,
+      'min': ee.Number(min),
+      'max': ee.Number(max),
+      }).rename('VCI')
+      .copyProperties(img,['system:time_start','system:time_end']);
+  return index;
+});
+var chart = ui.Chart.image.series(vci, geometry, 
+ee.Reducer.mean(), 500, 'system:time_start')
+.setChartType('ScatterChart')
+.setOptions({
+  title: 'Vegetation Condition Index',
+  lineWidth: 1,
+  pointSize: 2
+});
+
+print(chart);
+var lst = ee.ImageCollection('MODIS/006/MOD11A2')
+.filterBounds(geometry)
+.filterDate('2000-01-01','2000-12-31')
+.select('LST_Day_1km')
+.map(function(img){
+  var multiplied = img.multiply(0.02);
+  var unmasked = img.gt(-999).reduceRegion(ee.Reducer.count(),geometry,1000);
+  return multiplied.set('count',unmasked.get('LST_Day_1km'))
+  .copyProperties(img,['system:time_start','system:time_end']);
+})
+.filter(ee.Filter.neq('count',0));
+
+//var filtered = lst.filter(ee.Filter.neq('count',0));
+
+// thermal condition index 
+// TCI = max - LST / max - min
+
+var tci = lst.map(function(img){
+  
+  var min = img.reduceRegion(ee.Reducer.min(),geometry,1000).get('LST_Day_1km');
+  var max = img.reduceRegion(ee.Reducer.max(),geometry,1000).get('LST_Day_1km');
+  
+  var index = img.expression(
+    '(max-LST)/(max-min)',
+  {
+    'LST': img,
+    'max': ee.Number(max),
+    'min': ee.Number(min)
+    
+    });
+    
+    return index
+    .copyProperties(img,['system:time_start','system:time_end'])
+});
+
+print(tci);
+
+
+var chart = ui.Chart.image.series(tci, geometry, ee.Reducer.mean(),
+1000, 'system:time_start')
+.setOptions({
+  title: 'Thermal Condition Index',
+  lineWidth: 1,
+  pointSize: 2
+});
+
+print(chart);
+
+//Map.addLayer(tci);
