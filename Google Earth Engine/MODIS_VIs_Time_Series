@@ -1,0 +1,118 @@
+var site = geometry;
+var startDateInput = ui.Textbox({ value: '2001-01-01' });
+var endDateInput = ui.Textbox({ value: '2022-12-31' });
+var selectedProduct = ui.Select({
+  items: ['MOD13Q1', 'MOD13A1', 'MOD13A2'],
+  value: 'MOD13Q1',
+});
+var selectedVI = ui.Select({
+  items: ['NDVI', 'EVI'],
+  value: 'NDVI',
+});
+var collectionForAnimation;
+
+function fetchDataAndVisualize() {
+  Map.clear();
+  var startDate = startDateInput.getValue();
+  var endDate = endDateInput.getValue();
+  var productID = selectedProduct.getValue();
+  var viType = selectedVI.getValue();
+  var collectionPath = 'MODIS/006/' + productID;
+  var collection = ee.ImageCollection(collectionPath)
+                      .filterDate(startDate, endDate)
+                      .select(viType);
+  var scaledCollection = collection.map(function(image) {
+    return image.multiply(0.0001).set('system:time_start', image.get('system:time_start'));
+  });
+  collectionForAnimation = scaledCollection;
+  var clippedVI = scaledCollection.mean().clip(site);
+  var visParams = {
+    min: 0.0,
+    max: 1.0,
+    palette: [
+      'FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718', '74A901',
+      '66A000', '529400', '3E8601', '207401', '056201', '004C00', '023B01',
+      '012E01', '011D01', '011301'
+    ],
+  };
+  Map.centerObject(site);
+  Map.addLayer(clippedVI, visParams, productID + ' ' + viType);
+  generateTimeSeriesGraph(scaledCollection, site, viType, productID, startDate, endDate);
+}
+
+function generateTimeSeriesGraph(collection, region, viType, productID, startDate, endDate) {
+  var resolutionMap = {
+    'MOD13Q1': 250,
+    'MOD13A1': 500,
+    'MOD13A2': 1000
+  };
+  var resolution = resolutionMap[productID] || 'resolution';
+  var title = 'Time Series Changes of ' + viType + ' from ' + startDate + ' to ' + endDate +
+              ' (Spatial resolution (m): ' + resolution + ')';
+  var timeSeries = ui.Chart.image.series({
+    imageCollection: collection,
+    region: region,
+    reducer: ee.Reducer.mean(),
+    scale: resolutionMap[productID] || 500,
+    xProperty: 'system:time_start'
+  }).setOptions({
+    title: title,
+    vAxis: {title: viType},
+    hAxis: {title: 'Date', format: 'MM-yy'},
+    lineWidth: 1,
+    pointSize: 4,
+    series: {0: {color: '00FF00'}}
+  });
+  print(timeSeries);
+}
+
+function animateCollection() {
+  var list = collectionForAnimation.toList(collectionForAnimation.size());
+  var index = 0;
+  function renderNextImage() {
+    if (index < list.size().getInfo()) {
+      var image = ee.Image(list.get(index));
+      var visParams = {
+        min: 0.0,
+        max: 1.0,
+        palette: [
+          'FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718', '74A901',
+          '66A000', '529400', '3E8601', '207401', '056201', '004C00', '023B01',
+          '012E01', '011D01', '011301'
+        ],
+      };
+      Map.layers().set(0, ui.Map.Layer(image.clip(site), visParams));
+      index++;
+      ui.util.setTimeout(renderNextImage, 5000);
+    }
+  }
+  renderNextImage();
+}
+
+function initializeUI() {
+  var panel = ui.Panel({ style: { width: '250px', padding: '8px' } });
+  ui.root.insert(0, panel);
+  panel.add(ui.Label('MODIS NDVI & EVI Time Series Analyzer', { fontWeight: 'bold', fontSize: '16px', margin: '10px 0' }));
+  panel.add(ui.Label('Start Date (YYYY-MM-DD):'));
+  panel.add(startDateInput);
+  panel.add(ui.Label('End Date (YYYY-MM-DD):'));
+  panel.add(endDateInput);
+  panel.add(ui.Label('Select MODIS Product:'));
+  panel.add(selectedProduct);
+  panel.add(ui.Label('Select Vegetation Index:'));
+  panel.add(selectedVI);
+
+  var analyzerButton = ui.Button({
+    label: 'Time Series Chart',
+    onClick: fetchDataAndVisualize
+  });
+  panel.add(analyzerButton);
+
+  var animationButton = ui.Button({
+    label: 'Animate',
+    onClick: animateCollection
+  });
+  panel.add(animationButton);
+}
+
+initializeUI();
