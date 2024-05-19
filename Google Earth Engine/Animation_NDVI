@@ -1,0 +1,122 @@
+var gaul = ee.FeatureCollection("FAO/GAUL/2015/level2");
+function getUniqueValues(property) {
+  return ee.List(gaul.aggregate_array(property)).distinct().sort();
+}
+var countrySelect = ui.Select({
+  placeholder: 'Select a country',
+  onChange: updateFirstLevelAdmin
+});
+var firstLevelAdminSelect = ui.Select({
+  placeholder: 'Select first level admin',
+  onChange: updateSecondLevelAdmin
+});
+var secondLevelAdminSelect = ui.Select({
+  placeholder: 'Select second level admin'
+});
+getUniqueValues('ADM0_NAME').evaluate(function(countries) {
+  countrySelect.items().reset(countries);
+});
+function updateFirstLevelAdmin(selectedCountry) {
+  gaul.filter(ee.Filter.eq('ADM0_NAME', selectedCountry))
+    .aggregate_array('ADM1_NAME').distinct().sort()
+    .evaluate(function(admin1) {
+      firstLevelAdminSelect.items().reset(admin1);
+      secondLevelAdminSelect.items().reset([]);
+    });
+}
+function updateSecondLevelAdmin(selectedAdmin1) {
+  gaul.filter(ee.Filter.and(
+      ee.Filter.eq('ADM0_NAME', countrySelect.getValue()),
+      ee.Filter.eq('ADM1_NAME', selectedAdmin1)))
+    .aggregate_array('ADM2_NAME').distinct().sort()
+    .evaluate(function(admin2) {
+      secondLevelAdminSelect.items().reset(admin2);
+    });
+}
+var startYearInput = ui.Textbox({
+  placeholder: 'Start Year (e.g., 2001)',
+  value: '2001'
+});
+var endYearInput = ui.Textbox({
+  placeholder: 'End Year (e.g., 2023)',
+  value: '2023'
+});
+var animateButton = ui.Button({
+  label: 'Generate NDVI Animation',
+  onClick: generateAnimation
+});
+var panel = ui.Panel({
+  widgets: [countrySelect, firstLevelAdminSelect, secondLevelAdminSelect, startYearInput, endYearInput, animateButton],
+  style: {width: '300px'}
+});
+ui.root.insert(0, panel);
+function generateAnimation() {
+  var selectedRegion = gaul.filter(ee.Filter.and(
+      ee.Filter.eq('ADM0_NAME', countrySelect.getValue()),
+      ee.Filter.eq('ADM1_NAME', firstLevelAdminSelect.getValue()),
+      ee.Filter.eq('ADM2_NAME', secondLevelAdminSelect.getValue())
+    )).geometry();
+  var startYear = parseInt(startYearInput.getValue());
+  var endYear = parseInt(endYearInput.getValue());
+  var annualNDVIList = [];
+  for (var year = startYear; year <= endYear; year++) {
+    var startDate = ee.Date.fromYMD(year, 1, 1);
+    var endDate = ee.Date.fromYMD(year, 12, 31);
+    var collection = ee.ImageCollection('MODIS/006/MOD13A1')
+                      .filterDate(startDate, endDate)
+                      .filterBounds(selectedRegion)
+                      .select('NDVI');
+    var scaledNDVI = collection.map(function(image) {
+      return image.multiply(0.0001).copyProperties(image, ['system:time_start']);
+    });
+    var medianNDVI = scaledNDVI.median().set('year', year);
+    annualNDVIList.push(medianNDVI);
+  }
+  var ndviCollection = ee.ImageCollection(annualNDVIList);
+  var videoArgs = {min: -0.2, max: 1, palette: ['blue', 'white', 'green']};
+
+  var outline = ee.Image().byte().paint({
+    featureCollection: selectedRegion,
+    color: 1,
+    width: 3
+  });
+  var animation = ndviCollection.map(function(image) {
+    var visualized = image.visualize(videoArgs).blend(outline.visualize({palette: ['red']}));
+    return visualized;
+  });
+  var thumbnail = ui.Thumbnail({
+    image: animation,
+    params: {
+      dimensions: 768,
+      region: selectedRegion,
+      framesPerSecond: 1
+    },
+    style: {
+      position: 'bottom-center',
+      height: '300px',
+      width: '400px'
+    }
+  });
+  if (panel.widgets().length() > 7) {
+    panel.widgets().set(7, thumbnail);
+  } else {
+    panel.widgets().add(thumbnail);
+  }
+  selectedRegion.evaluate(function(regionGeoJSON) {
+    Export.video.toDrive({
+      collection: animation,
+      description: 'NDVI_Animation',
+      dimensions: 768,
+      region: regionGeoJSON,
+      framesPerSecond: 1
+    });
+    print('Export initiated. Check the "Tasks" tab for progress.');
+  });
+}
+var exportButton = ui.Button({
+  label: 'Export Animation to Drive',
+  onClick: function() {
+    generateAnimation();
+  }
+});
+panel.add(exportButton);
