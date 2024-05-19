@@ -1,0 +1,91 @@
+Map.centerObject(region);
+
+var startDate = '2004-01-01'; 
+var endDate = '2010-01-01';
+
+var processLandsat7 = function(img){
+  var selectedBands = img.select('B[1-5]', 'B7').multiply(0.0001).clip(region);
+  var ndvi = selectedBands.normalizedDifference(['B4', 'B3']).rename('ndvi');
+  return ndvi.copyProperties(img, ['system:time_start', 'system:time_end']);
+};
+
+var landsat7 = ee.ImageCollection("LANDSAT/LE07/C01/T1_SR")
+  .filterDate(startDate, endDate)
+  .filterBounds(region)
+  .filter(ee.Filter.lt('CLOUD_COVER', 10))
+  .filter(ee.Filter.calendarRange(6, 10, 'month'))
+  .filter(ee.Filter.eq('WRS_PATH', 166))
+  .filter(ee.Filter.eq('WRS_ROW', 38))
+  .map(processLandsat7);
+
+print('landsat7Data', landsat7);
+
+Map.addLayer(landsat7.toBands(), {}, 'ndviStack', false);
+
+var fillGaps = function(img){
+  var medianFiltered = img.focal_median(1, 'square', 'pixels', 8);
+  var filled = medianFiltered.blend(img);
+  return filled.copyProperties(img, ['system:time_start', 'system:time_end']);
+};
+
+var landsat7GapFilled = landsat7.map(fillGaps);
+
+print('landsat7GapFilled', landsat7GapFilled);
+
+Map.addLayer(landsat7GapFilled.toBands().clip(region), {}, 'ndviStackGapFilled', false);
+
+var landsat7GapFilledBands = landsat7GapFilled.toBands();
+Export.image.toDrive({
+  image: landsat7GapFilledBands.clip(region),
+  description: 'landsat7GapFilled',
+  scale: 100,
+  maxPixels: 1e13,
+  crs: landsat7GapFilledBands.clip(region).projection().crs(),
+  region: region
+});
+
+var processLandsat7RGB = function(img){
+  var selectedBands = img.select('B[1-5]', 'B7').multiply(0.0001).clip(region);
+  var ndvi = selectedBands.normalizedDifference(['B4', 'B3']).rename('ndvi');
+  return selectedBands.copyProperties(img, ['system:time_start', 'system:time_end']);
+};
+
+var landsat7RGB = ee.ImageCollection("LANDSAT/LE07/C01/T1_SR")
+  .filterDate(startDate, endDate)
+  .filterBounds(region)
+  .filter(ee.Filter.lt('CLOUD_COVER', 10))
+  .filter(ee.Filter.calendarRange(6, 10, 'month'))
+  .filter(ee.Filter.eq('WRS_PATH', 166))
+  .filter(ee.Filter.eq('WRS_ROW', 38))
+  .map(processLandsat7RGB);
+
+print('landsat7DataRGB', landsat7RGB);
+
+Map.addLayer(landsat7RGB.toBands(), {}, 'rgbStack', false);
+
+var landsat7GapFilledRGB = landsat7RGB.map(fillGaps);
+
+print('landsat7GapFilledRGB', landsat7GapFilledRGB);
+
+Map.addLayer(landsat7GapFilledRGB.toBands().clip(region), {}, 'RGBStackGapFilled', false);
+
+var exportProcess = function(collection){
+  var indexList = collection.reduceColumns(ee.Reducer.toList(), ['system:index']).get('list');
+  indexList.evaluate(function(indexes){
+    indexes.forEach(function(index){
+      var image = collection.filter(ee.Filter.eq('system:index', index)).first();
+      Export.image.toDrive({
+        image: image.clip(region),
+        description: index,
+        fileNamePrefix: index,
+        scale: 100,
+        crs: image.projection().crs(),
+        maxPixels: 1e13,
+        region: region
+      });
+    });
+  });
+};
+
+var exportLandsat7Data = exportProcess(landsat7GapFilled);
+var exportLandsat7DataRGB = exportProcess(landsat7GapFilledRGB);
