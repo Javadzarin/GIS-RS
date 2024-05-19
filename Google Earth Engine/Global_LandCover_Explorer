@@ -1,0 +1,193 @@
+// Load the feature collection for countries.
+var countries = ee.FeatureCollection('USDOS/LSIB_SIMPLE/2017');
+
+// Load the ESA WorldCover V200 image for the year 2021 as a single image by mosaic method.
+var worldCover = ee.ImageCollection("ESA/WorldCover/v200").mosaic().select('Map');
+
+// Visualization parameters for the WorldCover map
+var visParams = {
+  min: 10,
+  max: 100,
+  palette: [
+    '#006400', // Tree cover
+    '#ffbb22', // Shrubland
+    '#ffff4c', // Grassland
+    '#f096ff', // Cropland
+    '#fa0000', // Built-up
+    '#b4b4b4', // Bare / sparse vegetation
+    '#f0f0f0', // Snow and ice
+    '#0064c8', // Permanent water bodies
+    '#0096a0', // Herbaceous wetland
+    '#00cf75', // Mangroves
+    '#fae6a0'  // Moss and lichen
+  ]
+};
+
+// Initialize the UI components.
+var panel = ui.Panel({style: {width: '300px'}});
+var mapPanel = ui.Map();
+
+// Add a label and a dropdown select widget to the panel.
+panel.add(ui.Label('Select a Country:'));
+var countrySelect = ui.Select();
+panel.add(countrySelect);
+
+// Add a label to display the percentage values.
+var percentageLabel = ui.Label('');
+panel.add(percentageLabel);
+
+// Populate the dropdown with country names.
+countries.aggregate_array('country_na').evaluate(function(names) {
+  countrySelect.items().reset(names.sort());
+});
+
+// Function to create and add a legend to the map.
+function addLegend() {
+  var legend = ui.Panel({
+    style: {
+      position: 'bottom-left',
+      padding: '8px 15px'
+    }
+  });
+
+  var legendTitle = ui.Label({
+    value: 'Land Cover Class',
+    style: {
+      fontWeight: 'bold',
+      fontSize: '18px',
+      margin: '0 0 4px 0',
+      padding: '0'
+    }
+  });
+  
+  // Add the title to the legend
+  legend.add(legendTitle);
+
+  // Define the color and name of each landcover class
+  var landcoverClasses = {
+    'Tree cover': '#006400',
+    'Shrubland': '#ffbb22',
+    'Grassland': '#ffff4c',
+    'Cropland': '#f096ff',
+    'Built-up': '#fa0000',
+    'Bare / sparse vegetation': '#b4b4b4',
+    'Snow and ice': '#f0f0f0',
+    'Permanent water bodies': '#0064c8',
+    'Herbaceous wetland': '#0096a0',
+    'Mangroves': '#00cf75',
+    'Moss and lichen': '#fae6a0'
+  };
+
+  Object.keys(landcoverClasses).forEach(function(landcoverClass) {
+    var colorBox = ui.Label({
+      style: {
+        backgroundColor: landcoverClasses[landcoverClass],
+        padding: '8px',
+        margin: '0 0 4px 0'
+      }
+    });
+
+    var description = ui.Label({
+      value: landcoverClass,
+      style: {margin: '0 0 4px 6px'}
+    });
+
+    // Add color box and description to the legend
+    legend.add(ui.Panel([colorBox, description], ui.Panel.Layout.Flow('horizontal')));
+  });
+
+  mapPanel.add(legend);
+}
+
+// Function to update the map when a country is selected.
+function updateMap(selectedCountry) {
+  var country = countries.filter(ee.Filter.eq('country_na', selectedCountry));
+  var countryGeometry = country.geometry();
+
+  // Clear previous layers and set a new layer for the selected country boundary.
+  mapPanel.clear();
+  mapPanel.addLayer(country, {color: 'FF0000'}, 'Country Boundary');
+  
+  // Clip the WorldCover image to the selected country's boundaries and add it to the map with color visualization.
+  var clippedWorldCover = worldCover.clip(countryGeometry);
+  mapPanel.addLayer(clippedWorldCover, visParams, 'ESA WorldCover 2021');
+  
+  // Center the map on the selected country.
+  mapPanel.centerObject(countryGeometry, 6);
+  
+  // Add the legend to the map.
+  addLegend();
+  
+  // Calculate and print the area of each land cover class.
+  calculateLandcoverArea(selectedCountry);
+}
+
+// Set onChange function for the country select widget.
+countrySelect.onChange(updateMap);
+////////////////////////////////////////
+
+function calculateLandcoverArea(selectedCountry) {
+  var country = countries.filter(ee.Filter.eq('country_na', selectedCountry));
+  var countryGeometry = country.geometry();
+
+  var clippedWorldCover = worldCover.clip(countryGeometry);
+
+  var areas = clippedWorldCover.reduceRegion({
+    reducer: ee.Reducer.frequencyHistogram(),
+    geometry: countryGeometry,
+    scale: 10,
+    maxPixels: 1e12
+  });
+
+  var histogram = ee.Dictionary(areas.get('Map'));
+
+  var areaInHectares = ee.Dictionary(histogram).map(function(key, value) {
+    return ee.Number(value).multiply(100).multiply(0.0001); // Convert from m^2 to hectares
+  });
+
+  var totalArea = ee.Number(areaInHectares.values().reduce(ee.Reducer.sum()));
+
+  // Calculate the percentage of each land cover class
+  var areaInPercentages = areaInHectares.map(function(key, value) {
+    return ee.Number(value).divide(totalArea).multiply(100);
+  });
+
+  // Map for descriptions and colors
+  var descriptionMap = {
+    '10': 'Tree cover',
+    '20': 'Shrubland',
+    '30': 'Grassland',
+    '40': 'Cropland',
+    '50': 'Built-up',
+    '60': 'Bare / sparse vegetation',
+    '80': 'Permanent water bodies',
+    '90': 'Herbaceous wetland',
+    '95': 'Mangroves',
+    '100': 'Moss and lichen'
+  };
+
+  areaInPercentages.getInfo(function(percentageValues) {
+    var percentageText = '';
+    Object.keys(percentageValues).forEach(function(key) {
+      var description = descriptionMap[key];
+      if (description) { // Ensure the key exists in the map
+        var value = percentageValues[key].toFixed(2);
+        percentageText += description + ': ' + value + '%\n';
+      }
+    });
+    percentageLabel.setValue('Landcover Area (%):\n' + percentageText);
+  });
+}
+
+///////////////////////////////////////
+
+// Configure the layout.
+ui.root.clear();
+ui.root.add(panel);
+ui.root.add(mapPanel);
+
+// Center the map on a default location.
+mapPanel.setCenter(20.0, 0.0, 2);
+
+// Call addLegend initially to show the legend even before any country is selected.
+addLegend();
