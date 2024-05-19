@@ -1,0 +1,58 @@
+// Define a dictionary for country-specific datasets
+var countryDatasets = {
+  'Australia': 'projects/sat-io/open-datasets/MSBuildings/Australia',
+};
+
+// Initially set featureCollection to Italy as default
+var featureCollection = ee.FeatureCollection(countryDatasets['Australia']);
+var selectedCountry = 'Australia'; // Initialize with a default country
+
+var panel = ui.Panel({style: {width: '300px'}});
+panel.add(ui.Label({
+  value: '1. Select a country, 2. Draw a polygon to specify the area of interest, then click "Run".', 
+  style: {fontWeight: 'bold'}
+}));
+
+// Dropdown for country selection
+var countrySelect = ui.Select({
+  items: Object.keys(countryDatasets),
+  placeholder: 'Select a country',
+  onChange: function(selected) {
+    selectedCountry = selected; // Update the selectedCountry variable
+    featureCollection = ee.FeatureCollection(countryDatasets[selectedCountry]);
+  }
+});
+panel.add(countrySelect);
+
+var drawTools = Map.drawingTools();
+drawTools.setShown(true);
+drawTools.setDrawModes(['polygon']);
+
+var runButton = ui.Button('Run', function() {
+  var layers = drawTools.layers();
+  if (layers.length() === 0) {
+    ui.alert('Please draw a polygon first.');
+    return;
+  }
+  var geometry = layers.get(0).getEeObject();
+  var clippedFeatureCollection = featureCollection.filterBounds(geometry);
+  
+  // Add the clipped feature collection as a layer to the map
+  Map.addLayer(clippedFeatureCollection, {color: 'FF0000'}, 'Clipped Buildings');
+
+  var exportParams = {
+    collection: clippedFeatureCollection,
+    description: 'exportToDrive' + selectedCountry + 'Buildings',
+    folder: 'GEE_Exports',
+    fileNamePrefix: selectedCountry + '_Buildings_' + new Date().toISOString(),
+    fileFormat: 'GeoJSON'
+  };
+
+  Export.table.toDrive(exportParams);
+  panel.widgets().set(3, ui.Label('Export initiated. Check the "Tasks" tab and your Google Drive.'));
+});
+
+panel.add(runButton);
+panel.add(ui.Label(''));
+
+ui.root.add(panel);
