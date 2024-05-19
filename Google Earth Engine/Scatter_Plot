@@ -1,0 +1,94 @@
+var areaOfInterest = ee.Geometry.Polygon([/* Add coordinates here */]);
+
+var sentinel2 = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED');
+
+function cloudMasking(image) {
+  var qa = image.select('QA60');
+  var cloudBitMask = 1 << 10;
+  var cirrusBitMask = 1 << 11;
+  var mask = qa.bitwiseAnd(cloudBitMask).eq(0).and(
+             qa.bitwiseAnd(cirrusBitMask).eq(0));
+  return image.updateMask(mask)
+      .select('B.*')
+      .multiply(0.0001)
+      .copyProperties(image, ['system:time_start']);
+}
+
+var filteredCollection = sentinel2
+  .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 30))
+  .filter(ee.Filter.date('2020-01-01', '2021-01-01'))
+  .filter(ee.Filter.bounds(areaOfInterest))
+  .map(cloudMasking)
+  .select('B.*');
+
+var composite = filteredCollection.median();
+
+var rgbVisualization = {bands: ['B4', 'B3', 'B2'], min: 0, max: 0.3, gamma: 1.2};
+Map.centerObject(areaOfInterest, 12);
+Map.addLayer(composite.clip(areaOfInterest), rgbVisualization, 'RGB');
+
+var gswYearlyCollection = ee.ImageCollection('JRC/GSW1_4/YearlyHistory');
+
+var filteredYearly = gswYearlyCollection.filter(ee.Filter.eq('year', 2020));
+var gsw2020 = ee.Image(filteredYearly.first());
+
+var waterLayer = gsw2020.eq(3).or(gsw2020.eq(2)).rename('water');
+var waterVisualization = {min: 0, max: 1, palette: ['white', 'blue']};
+Map.addLayer(waterLayer.clip(areaOfInterest).selfMask(), waterVisualization, 'Water', false);
+
+var bands = composite.select(['B8', 'B3']);
+
+var samples = bands.addBands(waterLayer).stratifiedSample({
+  numPoints: 50,
+  classBand: 'water',
+  region: areaOfInterest,
+  scale: 10
+});
+
+print(samples.first());
+
+var scatterChart = ui.Chart.feature.groups({
+  features: samples,
+  xProperty: 'B3',
+  yProperty: 'B8',
+  seriesProperty: 'water'
+}).setChartType('ScatterChart');
+
+print(scatterChart);
+
+var customizedChart = ui.Chart.feature.groups({
+  features: samples,
+  xProperty: 'B3',
+  yProperty: 'B8',
+  seriesProperty: 'water'
+}).setChartType('ScatterChart')
+  .setOptions({
+    title: 'Relationship Among Spectral Values for Water and Non-Water Pixels',
+    titleTextStyle: {bold: true},
+    dataOpacity: 0.8,
+    hAxis: {
+      'title': 'Green Reflectance',
+      titleTextStyle: {italic: true},
+    },
+    vAxis: {
+      'title': 'NIR Reflectance',
+      titleTextStyle: {italic: true},
+    },
+    series: {
+      0: {
+        pointShape: 'triangle',
+        pointSize: 4,
+        color: '#2c7bb6',
+        labelInLegend: 'Water',
+      },
+      1: {
+        pointShape: 'triangle',
+        pointSize: 4,
+        color: '#f46d43',
+        labelInLegend: 'Non-Water'
+      }
+    },
+    legend: {position: 'in'}
+  });
+
+print(customizedChart);
