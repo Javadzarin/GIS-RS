@@ -1,0 +1,99 @@
+var areaOfInterest = ee.Geometry.Polygon([/* Add coordinates here */]);
+
+var forestChange = ee.Image('UMD/hansen/global_forest_change_2022_v1_10');
+var lossYear = forestChange.select(['lossyear']);
+
+var colorPalette = [
+  '0083ba', '#4394b6', '#5ca5b2', '#74b6ad', '#8dc8a9',
+  '#a5d9a5', '#b7e2a8', '#c7e8ad', '#d7efb2', '#e7f5b7',
+  '#f7fcbc', '#fff7b6', '#fee8a4', '#fed890', '#fec980',
+  '#fdba6e', '#fba75e', '#f48b51', '#ed6e43', '#e5522a',
+  '#de3519', '#d7191c'
+];
+
+var lossYearVisualization = {
+  min: 0,
+  max: 22,
+  palette: colorPalette
+};
+
+Map.centerObject(areaOfInterest, 10);
+Map.setOptions('SATELLITE');
+Map.addLayer(areaOfInterest, {}, 'Selected Region', true, 0.6);
+Map.addLayer(lossYear, lossYearVisualization, 'Loss Year');
+
+var areaImage = ee.Image.pixelArea().divide(1e5);
+var areaImageWithYear = areaImage.addBands(lossYear);
+
+var areaStats = areaImageWithYear.reduceRegion({
+  reducer: ee.Reducer.sum().group({
+    groupField: 1,
+    groupName: 'year'
+  }),
+  geometry: areaOfInterest,
+  scale: 30,
+  maxPixels: 1e10
+});
+
+var yearAreaList = ee.List(areaStats.get('groups'));
+
+var formattedYearAreas = ee.List(yearAreaList.map(function(item) {
+  var areaDict = ee.Dictionary(item);
+  var yearString = ee.Number(areaDict.get('year')).format('20%02d');
+  var area = ee.Number(areaDict.get('sum'));
+  return ee.List([yearString, area]);
+}));
+
+print('Year Areas', formattedYearAreas);
+
+var rowList = formattedYearAreas.map(function(item) {
+  var year = ee.List(item).get(0);
+  var x = ee.String('Date(')
+    .cat(year)
+    .cat(', ')
+    .cat('0')
+    .cat(', ')
+    .cat('1')
+    .cat(ee.String(')'));
+    
+  var y = ee.List(item).get(1);
+  var color = ee.List(colorPalette).get(formattedYearAreas.indexOf(item));
+  var rowDict = {
+    c: [{v: x}, {v: y}, {v: color}]
+  };
+  return rowDict;
+});
+
+print('Rows', rowList);
+
+rowList.evaluate(function(rowListClient) {
+  var dataTable = {
+    cols: [
+      {id: 'x', type: 'date'},
+      {id: 'y', label: 'area', type: 'number'},
+      {id: 'style', label: 'Style', type: 'string', role: 'style'},
+    ],
+    rows: rowListClient
+  };
+  
+  var options = {
+    title: 'Yearly Forest Loss',
+    vAxis: {
+      title: 'Area (Hectares)', 
+    },
+    hAxis: {
+      title: 'Year',
+      gridlines: {color: 'transparent'}
+    },
+    legend: {position: 'none'},
+    height: '400px',
+    width: '600px'
+  };
+  
+  var chart = ui.Chart(dataTable, 'ColumnChart', options);
+  var chartPanel = ui.Panel({
+    style: {width: '600px', position: 'middle-right'}
+  });
+  chartPanel.add(chart);
+  Map.add(chartPanel);
+});
