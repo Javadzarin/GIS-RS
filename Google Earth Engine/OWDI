@@ -1,0 +1,131 @@
+var uiPanel = ui.Panel({
+  style: {
+    width: '400px',
+    position: 'bottom-left'
+  }
+});
+
+var startInput = ui.Textbox({placeholder: 'Start Date YYYY-MM-DD'});
+var endInput = ui.Textbox({placeholder: 'End Date YYYY-MM-DD'});
+
+var aSlider = ui.Slider({min: 0, max: 1, step: 0.05, value: 0.3, style: {stretch: 'horizontal'}});
+var aLabel = ui.Label('a (NIR weight):');
+var bSlider = ui.Slider({min: 0, max: 1, step: 0.05, value: 0.2, style: {stretch: 'horizontal'}});
+var bLabel = ui.Label('b (Red weight):');
+var cSlider = ui.Slider({min: 0, max: 1, step: 0.05, value: 0.5, style: {stretch: 'horizontal'}});
+var cLabel = ui.Label('c (SWIR weight):');
+var dSlider = ui.Slider({min: 0, max: 1, step: 0.05, value: 0.1, style: {stretch: 'horizontal'}});
+var dLabel = ui.Label('d (Blue-SWIR interaction weight):');
+var pSlider = ui.Slider({min: 1, max: 3, step: 0.1, value: 2, style: {stretch: 'horizontal'}});
+var pLabel = ui.Label('p (Impact of NIR Band):');
+var qSlider = ui.Slider({min: 1, max: 3, step: 0.1, value: 2, style: {stretch: 'horizontal'}});
+var qLabel = ui.Label('q (Impact of Red Band):');
+var rSlider = ui.Slider({min: 1, max: 3, step: 0.1, value: 2, style: {stretch: 'horizontal'}});
+var rLabel = ui.Label('r (Impact of SWIR Band):');
+var cloudSlider = ui.Slider({min: 0, max: 100, step: 5, value: 20, style: {stretch: 'horizontal'}});
+var cloudLabel = ui.Label('Max Cloud Cover (%):');
+var thresholdSlider = ui.Slider({min: -1, max: 1, step: 0.01, value: -1, style: {stretch: 'horizontal'}});
+var thresholdLabel = ui.Label('ODWI Threshold (default -1):');
+
+var exportButton = ui.Button('Export Last Visualized ODWI to Drive', function() {
+    if (lastVisualizedODWI) {
+        var formattedThreshold = Math.round(thresholdSlider.getValue() * 100).toString();
+        var desc = 'ODWI_' + startInput.getValue().replace(/-/g, '') + '_' + endInput.getValue().replace(/-/g, '') + '_Threshold' + formattedThreshold;
+        Export.image.toDrive({
+            image: lastVisualizedODWI,
+            description: desc,
+            scale: 10,
+            region: geometry,
+            fileFormat: 'GeoTIFF'
+        });
+        print('Exporting ' + desc);
+    } else {
+        print('Please calculate the ODWI first.');
+    }
+});
+
+var lastVisualizedODWI;
+
+var button = ui.Button({
+  label: 'Calculate and Visualize ODWI',
+  onClick: function() {
+    var threshold = thresholdSlider.getValue();
+    var visualization = {
+      min: threshold,
+      max: 1,
+      bands: ['ODWI'],
+      palette: ['FFFFFF', '87CEFA', '1E90FF', '0000FF', '00008B']
+    };
+
+    var dataset = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+        .filterDate(startInput.getValue(), endInput.getValue())
+        .map(function(image){return image.clip(geometry)})
+        .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', cloudSlider.getValue()))
+        .map(maskS2clouds)
+        .map(function(image) {
+          return addODWI(image, aSlider.getValue(), bSlider.getValue(), cSlider.getValue(), dSlider.getValue(),
+                         pSlider.getValue(), qSlider.getValue(), rSlider.getValue());
+        });
+
+    lastVisualizedODWI = dataset.median().select('ODWI').gte(threshold);
+    Map.addLayer(lastVisualizedODWI, visualization, 'ODWI >= ' + threshold.toFixed(2));
+  }
+});
+
+uiPanel.add(startInput);
+uiPanel.add(endInput);
+uiPanel.add(aLabel);
+uiPanel.add(aSlider);
+uiPanel.add(bLabel);
+uiPanel.add(bSlider);
+uiPanel.add(cLabel);
+uiPanel.add(cSlider);
+uiPanel.add(dLabel);
+uiPanel.add(dSlider);
+uiPanel.add(pLabel);
+uiPanel.add(pSlider);
+uiPanel.add(qLabel);
+uiPanel.add(qSlider);
+uiPanel.add(rLabel);
+uiPanel.add(rSlider);
+uiPanel.add(cloudLabel);
+uiPanel.add(cloudSlider);
+uiPanel.add(thresholdLabel);
+uiPanel.add(thresholdSlider);
+uiPanel.add(button);
+uiPanel.add(exportButton);
+ui.root.add(uiPanel);
+
+function maskS2clouds(image) {
+  var qa = image.select('QA60');
+  var cloudBitMask = 1 << 10;
+  var cirrusBitMask = 1 << 11;
+  var mask = qa.bitwiseAnd(cloudBitMask).eq(0)
+             .and(qa.bitwiseAnd(cirrusBitMask).eq(0));
+  return image.updateMask(mask).divide(10000);
+}
+
+function addODWI(image, a, b, c, d, p, q, r) {
+  var green = image.select('B3').divide(0.3);
+  var red = image.select('B4').divide(0.3);
+  var blue = image.select('B2').divide(0.3);
+  var nir = image.select('B8').divide(0.3);
+  var swir = image.select('B11').divide(0.3);
+
+  var numerator = green.subtract(
+    nir.pow(p).multiply(a)
+    .add(red.pow(q).multiply(b))
+    .add(swir.pow(r).multiply(c))
+    .add(blue.multiply(swir).multiply(d))
+  );
+
+  var denominator = green.add(
+    nir.pow(p).multiply(a)
+    .add(red.pow(q).multiply(b))
+    .add(swir.pow(r).multiply(c))
+    .add(blue.multiply(swir).multiply(d))
+  );
+
+  var odwi = numerator.divide(denominator).rename('ODWI');
+  return image.addBands(odwi);
+}
