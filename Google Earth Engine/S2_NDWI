@@ -1,0 +1,16 @@
+Map.centerObject(table);
+var S2 = ee.ImageCollection('COPERNICUS/S2_SR')
+.filterBounds(table)
+.filterDate('2018-01-01','2023-12-31')
+.filter(ee.Filter.lte('CLOUDY_PIXEL_PERCENTAGE', 5))
+.select('B3', 'B8')
+.mean()
+.clip(table);
+var NDWI = ((S2.select('B8').subtract(S2.select('B3')))).divide((S2.select('B8').add(S2.select('B3'))));
+Map.addLayer(NDWI);
+Export.image.toDrive({
+  image : NDWI,
+  description : 'NDWI_S2_mean_2018_2023',
+  scale : 10, 
+   region : table,
+   maxPixels : 1e13});
