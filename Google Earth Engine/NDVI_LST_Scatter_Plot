@@ -1,0 +1,81 @@
+// Define the region of interest: Australia
+var australia = ee.FeatureCollection("USDOS/LSIB_SIMPLE/2017")
+                .filter(ee.Filter.eq('country_na', 'Australia'));
+
+// Define the time period
+var startYear = 2015;
+var endYear = 2022;
+
+var ndviValues = [];
+var lstValues = [];
+var years = [];
+
+// Loop through the years and compute annual median NDVI and LST
+for (var year = startYear; year <= endYear; year++) {
+  var startDate = ee.Date.fromYMD(year, 1, 1);
+  var endDate = ee.Date.fromYMD(year, 12, 31);
+  
+  // Compute annual median NDVI
+  var ndviCollection = ee.ImageCollection('MODIS/006/MOD13A1')
+                          .filterDate(startDate, endDate)
+                          .filterBounds(australia)
+                          .select('NDVI');
+  
+  var scaledNDVI = ndviCollection.map(function(image) {
+    return image.multiply(0.0001).copyProperties(image, ['system:time_start']);
+  });
+  
+  var medianNDVI = scaledNDVI.median();
+  
+  // Compute annual median LST
+  var lstCollection = ee.ImageCollection('MODIS/006/MOD11A1')
+                          .filterDate(startDate, endDate)
+                          .filterBounds(australia)
+                          .select('LST_Night_1km');
+  
+  var scaledLST = lstCollection.map(function(image) {
+    return image.multiply(0.02).copyProperties(image, ['system:time_start']);
+  });
+  
+  var medianLST = scaledLST.median();
+  
+  // Reduce region to get mean values for NDVI and LST for the year
+  var meanNDVI = medianNDVI.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: australia.geometry(),
+    scale: 1000,
+    maxPixels: 1e12
+  }).get('NDVI');
+  
+  var meanLST = medianLST.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: australia.geometry(),
+    scale: 1000,
+    maxPixels: 1e12
+  }).get('LST_Night_1km');
+  
+  // Store the values
+  ndviValues.push(meanNDVI);
+  lstValues.push(meanLST);
+  years.push(year);
+}
+
+// Convert the lists to ee.List for further processing
+ndviValues = ee.List(ndviValues);
+lstValues = ee.List(lstValues);
+
+// Create a scatter chart
+var chart = ui.Chart.array.values({
+  array: ndviValues,
+  axis: 0,
+  xLabels: lstValues
+})
+.setSeriesNames(['NDVI'])
+.setOptions({
+  title: 'Annual Mean NDVI vs LST for Australia (2015-2022)',
+  hAxis: {title: 'LST (K)'},
+  vAxis: {title: 'NDVI'},
+  pointSize: 5,
+});
+
+print(chart);
