@@ -1,0 +1,107 @@
+var lcClasses = {
+  '10': 'Tree cover',
+  '20': 'Shrubland',
+  '30': 'Grassland',
+  '40': 'Cropland',
+  '50': 'Built-up',
+  '60': 'Bare / sparse vegetation',
+  '70': 'Snow and ice',
+  '80': 'Permanent water bodies',
+  '90': 'Herbaceous wetland',
+  '95': 'Mangroves',
+  '100': 'Moss and lichen'
+};
+var classColors = {
+  '10': '#006400',
+  '20': '#ffbb22',
+  '30': '#ffff4c',
+  '40': '#f096ff',
+  '50': '#fa0000',
+  '60': '#b4b4b4',
+  '70': '#f0f0f0',
+  '80': '#0064c8',
+  '90': '#0096a0',
+  '95': '#00cf75',
+  '100': '#fae6a0'
+};
+var worldCover = ee.ImageCollection("ESA/WorldCover/v200").first().clip(geometry);
+var lcCheckboxes = Object.keys(lcClasses).map(function(key) {
+  return ui.Checkbox({
+    label: lcClasses[key] + ' (' + key + ')',
+    value: false
+  });
+});
+var checkboxPanel = ui.Panel({
+  widgets: lcCheckboxes,
+  layout: ui.Panel.Layout.flow('vertical'),
+  style: {stretch: 'vertical'}
+});
+var lcSelectPanel = ui.Panel({
+  widgets: [
+    ui.Label('Select Land Cover Classes', {fontWeight: 'bold'}),
+    checkboxPanel
+  ],
+  style: {width: '300px', padding: '8px'}
+});
+ui.root.add(lcSelectPanel);
+var samplingPointsInput = ui.Textbox({
+  value: '100',
+  placeholder: 'Enter number of sampling points'
+});
+var samplingButton = ui.Button('Run Sampling and Export');
+ui.root.add(samplingPointsInput);
+ui.root.add(samplingButton);
+var visualizeButton = ui.Button({
+  label: 'Visualize Selected Classes',
+  onClick: function() {
+    var selectedValues = lcCheckboxes.filter(function(checkbox) {
+      return checkbox.getValue();
+    }).map(function(checkbox) {
+      var label = checkbox.getLabel();
+      return parseInt(label.match(/\((\d+)\)/)[1]);
+    });
+    var selectedColors = selectedValues.map(function(val) {
+      return classColors[val.toString()];
+    });
+    var mask = worldCover.select('Map').remap(selectedValues, selectedValues, 0);
+    mask = mask.updateMask(mask);
+    var visParams = {
+      min: Math.min.apply(null, selectedValues),
+      max: Math.max.apply(null, selectedValues),
+      palette: selectedColors
+    };
+    Map.clear();
+    Map.addLayer(mask, visParams, 'Selected Land Cover Classes');
+  }
+});
+lcSelectPanel.add(visualizeButton);
+samplingButton.onClick(function() {
+  var numPoints = parseInt(samplingPointsInput.getValue());
+  var selectedValues = lcCheckboxes.filter(function(checkbox) {
+      return checkbox.getValue();
+  }).map(function(checkbox) {
+      var label = checkbox.getLabel();
+      return parseInt(label.match(/\((\d+)\)/)[1]);
+  });
+  var mask = worldCover.select('Map').remap(selectedValues, selectedValues, 0);
+  mask = mask.updateMask(mask);
+  var sampling = mask.stratifiedSample({
+    numPoints: numPoints,
+    classBand: 'remapped',
+    region: Map.getBounds(true),
+    scale: 10,
+    geometries: true
+  });
+  var pointsWithCoords = sampling.map(function(feature) {
+    return feature.set({
+      'longitude': feature.geometry().coordinates().get(0),
+      'latitude': feature.geometry().coordinates().get(1)
+    });
+  });
+  Export.table.toDrive({
+    collection: pointsWithCoords,
+    description: 'Random_Sampling_Points',
+    fileFormat: 'CSV'
+  });
+  Map.addLayer(sampling, {color: 'red'}, 'Sampled Points');
+});
