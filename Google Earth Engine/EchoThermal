@@ -1,0 +1,264 @@
+var gaulLevel2 = ee.FeatureCollection("FAO/GAUL/2015/level2");
+var uniqueCountries = gaulLevel2.distinct(['ADM0_NAME'])
+  .aggregate_array('ADM0_NAME')
+  .getInfo(function(countryNames) {
+    countrySelect.items().reset(countryNames);
+  });
+var panel = ui.Panel({
+  style: {
+    width: '400px',
+    position: 'bottom-left'
+  }
+});
+//////////////
+// Create and add instructions label
+var instructionsTitle = ui.Label({
+  value: 'How to Use This App:',
+  style: {fontWeight: 'bold', fontSize: '16px', margin: '0 0 8px 10px'}
+});
+
+// Adding each step as a separate label
+var step1 = ui.Label({
+  value: '1. Select a country from the dropdown menu.',
+  style: {fontWeight: 'bold', margin: '0 0 4px 10px'}
+});
+var step2 = ui.Label({
+  value: '2. Select a first-level administrative unit.',
+  style: {fontWeight: 'bold', margin: '0 0 4px 10px'}
+});
+var step3 = ui.Label({
+  value: '3. Select a second-level administrative unit.',
+  style: {fontWeight: 'bold', margin: '0 0 4px 10px'}
+});
+var step4 = ui.Label({
+  value: '4. Click the "Analyze LST" button to visualize the Land Surface Temperature (LST).',
+  style: {fontWeight: 'bold', margin: '0 0 4px 10px'}
+});
+var step5 = ui.Label({
+  value: '5. Use the "Analyze Hotspot" button to identify and visualize temperature hotspots.',
+  style: {fontWeight: 'bold', margin: '0 0 4px 10px'}
+});
+var step6 = ui.Label({
+  value: '6. To further analyze, convert identified hotspots into vector polygons with the "Convert Hotspots to Polygons" button.',
+  style: {fontWeight: 'bold', margin: '0 0 4px 10px'}
+});
+
+var applicationInfo = ui.Label({
+  value: 'Usage (ONLY: educational and research): The app uses USGS Landsat 8 Level 2, Collection 2, Tier 1 and analyses average LST (land surface temperature) to identify trending thermal hotspots globally, and basic aiding urban planners and land managers in initial prioritizing greening initiatives (such as green roof in urban areas and reforestation in rural areas to mitigate heat island effects. The analysis uses Landsat 8 thermal band (band 10) data from Jan 2014 to Dec 2023, with a cloud cover filter (20% and QA band) applied to ensure quality. Threshold calculation for detection of thermal hotspots: adding twice the LST standard deviation to the mean LST across the selected area creates a threshold that marks the upper boundary of normal temperature variation. In a normal distribution, approximately 95% of the data falls within two standard deviations from the mean. Given the extensive time framework and high spatial resolution (30 m), steps may take a few minutes (5-10 minutes) to complete.',
+  style: {margin: '8px 10px'}
+});
+
+// Add the instructions to the panel
+panel.add(instructionsTitle);
+panel.add(step1);
+panel.add(step2);
+panel.add(step3);
+panel.add(step4);
+panel.add(step5);
+panel.add(step6);
+panel.add(applicationInfo);
+
+///////////////
+
+ui.root.add(panel);
+var countrySelect = ui.Select({
+  items: [],
+  placeholder: 'Select a country',
+  onChange: function(selectedCountry) {
+    updateFirstLevelAdminUnits(selectedCountry);
+  }
+});
+var firstLevelSelect = ui.Select({
+  placeholder: 'Select a first-level unit',
+  onChange: function(selectedFirstLevelUnit) {
+    var selectedCountry = countrySelect.getValue();
+    updateSecondLevelAdminUnits(selectedCountry, selectedFirstLevelUnit);
+  }
+});
+var secondLevelSelect = ui.Select({
+  placeholder: 'Select a second-level unit',
+});
+function updateFirstLevelAdminUnits(country) {
+  var filtered = gaulLevel2.filter(ee.Filter.eq('ADM0_NAME', country));
+  var firstLevelUnits = filtered.aggregate_array('ADM1_NAME').getInfo();
+  firstLevelSelect.items().reset(firstLevelUnits);
+  firstLevelSelect.setPlaceholder('Select a first-level unit');
+}
+function updateSecondLevelAdminUnits(country, firstLevelUnit) {
+  var filtered = gaulLevel2
+                  .filter(ee.Filter.eq('ADM0_NAME', country))
+                  .filter(ee.Filter.eq('ADM1_NAME', firstLevelUnit));
+  var secondLevelUnits = filtered.aggregate_array('ADM2_NAME').getInfo();
+  secondLevelSelect.items().reset(secondLevelUnits);
+  secondLevelSelect.setPlaceholder('Select a second-level unit');
+}
+panel.add(countrySelect);
+panel.add(firstLevelSelect);
+panel.add(secondLevelSelect);
+secondLevelSelect.onChange(function(selectedSecondLevelUnit) {
+  var filtered = gaulLevel2
+                  .filter(ee.Filter.eq('ADM2_NAME', selectedSecondLevelUnit));
+  Map.clear();
+  Map.addLayer(filtered, {}, 'Selected Admin Unit'),
+  Map.centerObject(filtered);
+});
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Global variable to hold the selected feature for clipping
+var selectedFeature;
+
+// Modify the secondLevelSelect onChange function to update selectedFeature
+secondLevelSelect.onChange(function(selectedSecondLevelUnit) {
+  var filtered = gaulLevel2
+                  .filter(ee.Filter.eq('ADM2_NAME', selectedSecondLevelUnit));
+  Map.clear();
+  Map.addLayer(filtered, {}, 'Selected Admin Unit');
+  Map.centerObject(filtered);
+  // Update the selectedFeature with the latest selection
+  selectedFeature = filtered;
+});
+
+// Analyze button with adjusted onClick function for dynamic LST visualization
+var analyzeButton = ui.Button({
+  label: 'Analyze LST',
+  onClick: function() {
+    if (!selectedFeature) {
+      print('Please select a second-level administrative unit.');
+      return;
+    }
+    
+    var LST = ee.ImageCollection('LANDSAT/LC08/C02/T1_L2')
+      .select('ST_B10')
+      .map(function(LST){return LST.clip(selectedFeature)})
+      .filterDate('2014-01-01', '2023-12-31')
+      .filter(ee.Filter.lessThan('CLOUD_COVER', 20))
+      .map (function(img){
+        var LST = img.select('ST_B10').multiply(0.00341802).add(149);
+        return LST.clip(selectedFeature).subtract(273.15)
+          .copyProperties(img, ['system:time_start', 'system:time_end']);
+      });
+
+    var meanLST = LST.mean();
+
+    // Compute the min and max LST values within the selected area
+    meanLST.reduceRegion({
+      reducer: ee.Reducer.minMax(),
+      geometry: selectedFeature.geometry(),
+      scale: 30,
+      maxPixels: 1e12
+    }).evaluate(function(result) {
+      // Define dynamic visualization parameters based on actual min and max LST
+      var visParams = {
+  min: result['ST_B10_min'],
+  max: result['ST_B10_max'],
+  palette: [
+    '0000FF', // Blue
+    '32CD32', // Lime Green
+    'FFFF00', // Yellow
+    'FFA500', // Orange
+    'FF0000'  // Red
+  ]
+};
+
+      Map.clear();
+      Map.addLayer(meanLST, visParams, 'LST (°C)');
+      Map.centerObject(selectedFeature);
+    });
+  }
+});
+
+panel.add(analyzeButton);
+///////////////////////////////////////////////////////////////////////////////////////////////
+// Global variable to hold the hotspot raster
+var hotspots;
+
+// Analyze Hotspot button with adjusted onClick function
+var analyzeHotspotButton = ui.Button({
+  label: 'Analyze Hotspot',
+  onClick: function() {
+    if (!selectedFeature) {
+      print('Please select a second-level administrative unit.');
+      return;
+    }
+    
+    var LST = ee.ImageCollection('LANDSAT/LC08/C02/T1_L2')
+      .select('ST_B10')
+      .map(function(img) { return img.clip(selectedFeature); })
+      .filterDate('2014-01-01', '2023-12-31')
+      .filter(ee.Filter.lessThan('CLOUD_COVER', 20))
+      .map(function(img) {
+        var LST = img.select('ST_B10').multiply(0.00341802).add(149).subtract(273.15);
+        return LST.copyProperties(img, ['system:time_start', 'system:time_end']);
+      });
+
+    var meanLST = LST.mean();
+
+    // Compute mean and standard deviation for the LST
+    meanLST.reduceRegion({
+      reducer: ee.Reducer.mean().combine({
+        reducer2: ee.Reducer.stdDev(),
+        sharedInputs: true
+      }),
+      geometry: selectedFeature.geometry(),
+      scale: 30,
+      maxPixels: 1e12
+    }).evaluate(function(result) {
+      var mean = result['ST_B10_mean'];
+      var stdDev = result['ST_B10_stdDev'];
+      var hotspotThreshold = mean + (2 * stdDev);
+      
+      // Update global hotspots variable
+      hotspots = meanLST.gt(hotspotThreshold).selfMask();
+      
+      // Visualization parameters for hotspots
+      var hotspotVis = {
+        min: 0,
+        max: 1,
+        palette: ['0000FF', 'FF0000'] // Blue for non-hotspots, Red for hotspots
+      };
+
+      Map.clear();
+      Map.addLayer(hotspots, hotspotVis, 'Hotspots');
+      Map.centerObject(selectedFeature);
+    });
+  }
+});
+
+panel.add(analyzeHotspotButton);
+/////////////////////////////////////////////////////////////////////////////
+// Global variable to hold the hotspot raster
+var hotspots;
+
+// Button to convert raster hotspots to vector polygons and make them smoother
+var convertHotspotsButton = ui.Button({
+  label: 'Convert Hotspots to Polygons',
+  onClick: function() {
+    if (!hotspots) {
+      print('Please analyze hotspots first.');
+      return;
+    }
+
+    // Convert hotspots to vectors and simplify the geometry for smoothing
+    var hotspotVectors = hotspots
+      .reduceToVectors({
+        reducer: ee.Reducer.countEvery(),
+        geometry: selectedFeature.geometry(),
+        scale: 30,
+        maxPixels: 1e12
+      }).map(function(feature) {
+        // Simplify the geometry of each vector feature to make edges smoother
+        return feature.setGeometry(feature.geometry().simplify(10)); // Adjust tolerance as needed
+      });
+
+    // Style for the vector hotspots
+    var vectorStyle = {color: 'FF0000', fillColor: '00000000'}; // Red outline with no fill
+
+    Map.clear();
+    Map.addLayer(selectedFeature, {}, 'Selected Area');
+    Map.addLayer(hotspotVectors.style(vectorStyle), {}, 'Hotspot Vectors');
+    Map.centerObject(selectedFeature);
+  }
+});
+
+// Add the Convert Hotspots to Polygons button to the panel
+panel.add(convertHotspotsButton);
+////////////////////////////////////////////////////////////////////////////////////////////
