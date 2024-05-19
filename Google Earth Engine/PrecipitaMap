@@ -1,0 +1,124 @@
+var panel = ui.Panel({style: {width: '400px'}});
+ui.root.insert(0, panel);
+
+var countrySelect = ui.Select({placeholder: 'Select a country'});
+var firstAdminSelect = ui.Select({placeholder: 'Select first level administrative'});
+var secondAdminSelect = ui.Select({placeholder: 'Select second level administrative'});
+
+var yearItems = [];
+for (var i = 2003; i <= 2023; i++) {
+  yearItems.push(i.toString());
+}
+
+var yearSelect = ui.Select({
+  items: yearItems,
+  placeholder: 'Select year',
+  value: '2022'
+});
+
+var monthSelect = ui.Select({
+  items: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+  placeholder: 'Select month',
+  value: 'January'
+});
+
+function populateCountrySelect() {
+  var countries = ee.FeatureCollection('USDOS/LSIB_SIMPLE/2017');
+  countries.aggregate_array('country_na').distinct().sort().evaluate(function(names) {
+    countrySelect.items().reset(names);
+  });
+}
+
+countrySelect.onChange(function(selectedCountry) {
+  var admin1 = ee.FeatureCollection('FAO/GAUL/2015/level1').filter(ee.Filter.eq('ADM0_NAME', selectedCountry));
+  admin1.aggregate_array('ADM1_NAME').sort().evaluate(function(names) {
+    firstAdminSelect.items().reset(names);
+    secondAdminSelect.items().reset([]);
+  });
+});
+
+firstAdminSelect.onChange(function(selectedAdmin1) {
+  var admin2 = ee.FeatureCollection('FAO/GAUL/2015/level2').filter(ee.Filter.and(
+    ee.Filter.eq('ADM0_NAME', countrySelect.getValue()),
+    ee.Filter.eq('ADM1_NAME', selectedAdmin1)
+  ));
+  admin2.aggregate_array('ADM2_NAME').sort().evaluate(function(names) {
+    secondAdminSelect.items().reset(names);
+  });
+});
+
+var precipitationButton = ui.Button({
+  label: 'Precipitation',
+  onClick: function() {
+    processAndDisplay();
+  }
+});
+
+panel.add(ui.Label('Select Country:'));
+panel.add(countrySelect);
+panel.add(ui.Label('Select First Level Administrative Unit:'));
+panel.add(firstAdminSelect);
+panel.add(ui.Label('Select Second Level Administrative Unit:'));
+panel.add(secondAdminSelect);
+panel.add(ui.Label('Select Year:'));
+panel.add(yearSelect);
+panel.add(ui.Label('Select Month:'));
+panel.add(monthSelect);
+panel.add(precipitationButton);
+
+// Create a placeholder for the legend
+var legendTitle = ui.Label('Precipitation (mm)');
+var legendMin = ui.Label('');
+var legendMax = ui.Label('');
+var legendMean = ui.Label('');
+var legend = ui.Panel([legendTitle, legendMin, legendMax, legendMean]);
+panel.add(legend);
+
+function processAndDisplay() {
+  Map.layers().reset();
+
+  var selectedRegion = ee.FeatureCollection('FAO/GAUL/2015/level2').filter(ee.Filter.and(
+    ee.Filter.eq('ADM0_NAME', countrySelect.getValue()),
+    ee.Filter.eq('ADM1_NAME', firstAdminSelect.getValue()),
+    ee.Filter.eq('ADM2_NAME', secondAdminSelect.getValue())
+  ));
+  var geometry = selectedRegion.geometry();
+  Map.centerObject(geometry);
+
+  var year = parseInt(yearSelect.getValue());
+  var month = monthSelect.getValue();
+  var layerName = month + ' ' + year + ' Precipitation';
+  var monthIndex = monthSelect.items().indexOf(month) + 1;
+  var start = ee.Date.fromYMD(year, monthIndex, 1);
+  var end = start.advance(1, 'month');
+
+  var chirpsMonthly = ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
+    .filterDate(start, end)
+    .filterBounds(geometry)
+    .select('precipitation')
+    .mean()
+    .clip(geometry);
+
+  Map.addLayer(chirpsMonthly, {palette: ['red', 'darkorange', 'orange', 'gold', 'yellow', 'yellowgreen', 'green', 'lightseagreen', 'cyan', 'blue'], min: 0, max: 20}, layerName);
+
+  var stats = chirpsMonthly.reduceRegion({
+    reducer: ee.Reducer.minMax().combine({
+      reducer2: ee.Reducer.mean(),
+      sharedInputs: true
+    }),
+    geometry: geometry,
+    scale: 1000
+  });
+
+  var minPrecip = stats.get('precipitation_min').getInfo();
+  var maxPrecip = stats.get('precipitation_max').getInfo();
+  var meanPrecip = stats.get('precipitation_mean').getInfo();
+
+  // Update the legend with new values
+  legendTitle.setValue('Precipitation (mm) for ' + month + ' ' + year);
+  legendMin.setValue('Min: ' + minPrecip.toFixed(2));
+  legendMax.setValue('Max: ' + maxPrecip.toFixed(2));
+  legendMean.setValue('Mean: ' + meanPrecip.toFixed(2));
+}
+
+populateCountrySelect();
