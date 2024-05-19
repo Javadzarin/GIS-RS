@@ -1,0 +1,110 @@
+var mainPanel = ui.Panel({ style: { width: '400px', padding: '8px' } });
+var mapPanel = ui.Map();
+var chartPanel = ui.Panel();
+var instructionsLabel = ui.Label('Click on a location to analyze monthly time series air quality parameters.');
+mainPanel.add(instructionsLabel);
+mapPanel.onClick(function(coords) {
+  aggregateAndChart(coords.lon, coords.lat);
+});
+ui.root.clear();
+ui.root.add(mainPanel);
+ui.root.setLayout(ui.Panel.Layout.Flow('horizontal'));
+ui.root.add(mapPanel);
+var NO2Collection = ee.ImageCollection('COPERNICUS/S5P/NRTI/L3_NO2').select('tropospheric_NO2_column_number_density');
+var AER_AICollection = ee.ImageCollection('COPERNICUS/S5P/OFFL/L3_AER_AI').select('absorbing_aerosol_index');
+var COCollection = ee.ImageCollection('COPERNICUS/S5P/OFFL/L3_CO').select('CO_column_number_density');
+var CH4Collection = ee.ImageCollection('COPERNICUS/S5P/OFFL/L3_CH4').select('CH4_column_volume_mixing_ratio_dry_air');
+var HCHOCollection = ee.ImageCollection('COPERNICUS/S5P/OFFL/L3_HCHO').select('tropospheric_HCHO_column_number_density');
+var startDate = ee.Date('2020-01-01');
+var endDate = ee.Date('2023-12-31');
+function monthlyAggregate(collection, gasName) {
+  return ee.ImageCollection(
+    ee.List.sequence(0, endDate.difference(startDate, 'month').subtract(1)).map(function(monthOffset) {
+      var date = startDate.advance(monthOffset, 'month');
+      var dateEnd = date.advance(1, 'month');
+      return collection.filterDate(date, dateEnd)
+        .mean()
+        .set('date', date.format('MMM YYYY'))  
+        .set('system:time_start', date.millis())
+        .set('gas', gasName);
+    })
+  );
+}
+function toFeatureCollection(monthlyCollection, scale, lon, lat) {
+  return monthlyCollection.map(function(image) {
+    var reduction = image.reduceRegion({
+      reducer: ee.Reducer.mean(),
+      geometry: ee.Geometry.Point(lon, lat),
+      scale: scale 
+    });
+    return ee.Feature(null, reduction)
+      .set({
+        'date': image.get('date'),
+        'gas': image.get('gas') 
+      });
+  }).filter(ee.Filter.notNull(['gas']));
+}
+function aggregateAndChart(lon, lat) {
+  var filteredNO2 = NO2Collection.filterDate(startDate, endDate);
+  var filteredAER_AI = AER_AICollection.filterDate(startDate, endDate);
+  var filteredCO = COCollection.filterDate(startDate, endDate);
+  var filteredCH4 = CH4Collection.filterDate(startDate, endDate);
+  var filteredHCHO = HCHOCollection.filterDate(startDate, endDate);
+  var NO2Features = toFeatureCollection(monthlyAggregate(filteredNO2, 'NO2'), 1113.2, lon, lat);
+  var AER_AIFeatures = toFeatureCollection(monthlyAggregate(filteredAER_AI, 'AER_AI'), 1113.2, lon, lat);
+  var COFeatures = toFeatureCollection(monthlyAggregate(filteredCO, 'CO'), 1113.2, lon, lat);
+  var CH4Features = toFeatureCollection(monthlyAggregate(filteredCH4, 'CH4'), 1113.2, lon, lat);
+  var HCHOFeatures = toFeatureCollection(monthlyAggregate(filteredHCHO, 'HCHO'), 1113.2, lon, lat);
+  var chartNO2 = ui.Chart.feature.byFeature(NO2Features, 'date', 'tropospheric_NO2_column_number_density')
+    .setOptions({
+      title: 'Monthly NO2 over selected location',
+      hAxis: { title: 'Date' },
+      vAxis: { title: 'NO2 (mol/m²)' },
+      lineWidth: 1,
+      pointSize: 3,
+      series: { 0: { color: 'FF0000' } }
+    });
+  var chartAER_AI = ui.Chart.feature.byFeature(AER_AIFeatures, 'date', 'absorbing_aerosol_index')
+    .setOptions({
+      title: 'Monthly Aerosol Index over selected location',
+      hAxis: { title: 'Date' },
+      vAxis: { title: 'Aerosol Index' },
+      lineWidth: 1,
+      pointSize: 3,
+      series: { 0: { color: '00FF00' } }
+    });
+  var chartCO = ui.Chart.feature.byFeature(COFeatures, 'date', 'CO_column_number_density')
+    .setOptions({
+      title: 'Monthly CO over selected location',
+      hAxis: { title: 'Date' },
+      vAxis: { title: 'CO (mol/m²)' },
+      lineWidth: 1,
+      pointSize: 3,
+      series: { 0: { color: '0000FF' } }
+    });
+  var chartCH4 = ui.Chart.feature.byFeature(CH4Features, 'date', 'CH4_column_volume_mixing_ratio_dry_air')
+    .setOptions({
+      title: 'Monthly CH4 over selected location',
+      hAxis: { title: 'Date' },
+      vAxis: { title: 'CH4 (ppb)' },
+      lineWidth: 1,
+      pointSize: 3,
+      series: { 0: { color: 'FF8000' } }
+    });
+  var chartHCHO = ui.Chart.feature.byFeature(HCHOFeatures, 'date', 'tropospheric_HCHO_column_number_density')
+    .setOptions({
+      title: 'Monthly HCHO over selected location',
+      hAxis: { title: 'Date' },
+      vAxis: { title: 'HCHO (mol/m²)' },
+      lineWidth: 1,
+      pointSize: 3,
+      series: { 0: { color: 'FF00FF' } }
+    });
+  chartPanel.clear();
+  chartPanel.add(chartNO2);
+  chartPanel.add(chartAER_AI);
+  chartPanel.add(chartCO);
+  chartPanel.add(chartCH4);
+  chartPanel.add(chartHCHO);
+  mainPanel.widgets().set(0, chartPanel);
+}
