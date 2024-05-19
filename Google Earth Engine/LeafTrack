@@ -1,0 +1,114 @@
+var map = ui.Map();
+map.setCenter(0, 0, 3);
+
+var sidePanel = ui.Panel({
+  style: { width: '400px', padding: '8px' }
+});
+
+var instructionLabel = ui.Label('Click on the map to select a location for analysis.');
+sidePanel.add(instructionLabel);
+
+var selectedPoint = null;
+map.onClick(function(coords) {
+  selectedPoint = ee.Geometry.Point([coords.lon, coords.lat]);
+  map.layers().reset([map.layers().get(0)]);
+  var pointMarker = ui.Map.Layer(selectedPoint, { color: 'red' }, 'Selected Location');
+  map.layers().add(pointMarker);
+  instructionLabel.setValue('Location selected. Click "Generate Chart" to see the results.');
+});
+
+ui.root.clear();
+ui.root.add(ui.SplitPanel(map, sidePanel));
+
+var startLabel = ui.Label('Start Date (YYYY-MM-DD):');
+var startDate = ui.Textbox({ value: '2017-03-28' });
+
+var endLabel = ui.Label('End Date (YYYY-MM-DD):');
+var endDate = ui.Textbox({ value: '2024-03-24' });
+
+var cloudLabel = ui.Label('Max Cloud Cover Percentage:');
+var cloudCover = ui.Textbox({ value: '10' });
+
+var runButton = ui.Button('Generate Chart');
+
+sidePanel.add(startLabel);
+sidePanel.add(startDate);
+sidePanel.add(endLabel);
+sidePanel.add(endDate);
+sidePanel.add(cloudLabel);
+sidePanel.add(cloudCover);
+sidePanel.add(runButton);
+
+function maskCloudsSCL(image) {
+  var scl = image.select('SCL');
+  var shadow = scl.eq(3);
+  var clouds = scl.eq(8).or(scl.eq(9)).or(scl.eq(11));
+  return image.updateMask(shadow.or(clouds).not());
+}
+
+function addIndexes(image) {
+  var ndvi = image.normalizedDifference(['B8', 'B4']).rename('NDVI');
+  var evi = image.expression(
+    '2.5 * ((NIR - Red) / (NIR + 6 * Red - 7.5 * Blue + 1))',
+    {
+      'NIR': image.select('B8'),
+      'Red': image.select('B4'),
+      'Blue': image.select('B2')
+    }
+  ).rename('EVI').clamp(-1, 1);
+  var msavi = image.expression(
+    '(2 * NIR + 1 - sqrt(pow((2 * NIR + 1), 2) - 8 * (NIR - Red))) / 2',
+    {
+      'NIR': image.select('B8'),
+      'Red': image.select('B4')
+    }
+  ).rename('MSAVI');
+  var lai = image.expression(
+    '3.618 * (NIR - Red) / (NIR + Red + 0.4) - 0.118',
+    {
+      'NIR': image.select('B8'),
+      'Red': image.select('B4')
+    }
+  ).rename('LAI');
+  var ndwi = image.normalizedDifference(['B3', 'B8']).rename('NDWI');
+  var ndre = image.normalizedDifference(['B8', 'B5']).rename('NDRE');
+  return image.addBands([ndvi, evi, msavi, lai, ndwi, ndre]);
+}
+
+function processCollection(collection, startDate, endDate, cloudThreshold) {
+  return ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+    .filterDate(startDate, endDate)
+    .filterBounds(selectedPoint)
+    .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', cloudThreshold))
+    .map(maskCloudsSCL)
+    .map(addIndexes);
+}
+
+runButton.onClick(function() {
+  if (!selectedPoint) {
+    instructionLabel.setValue('Please select a location on the map first.');
+    return;
+  }
+  
+  var start = startDate.getValue();
+  var end = endDate.getValue();
+  var cloud = parseFloat(cloudCover.getValue());
+  
+  var processedCollection = processCollection('COPERNICUS/S2_SR_HARMONIZED', start, end, cloud);
+  var chart = ui.Chart.image.series({
+    imageCollection: processedCollection.select(['NDVI', 'EVI', 'MSAVI', 'LAI', 'NDWI', 'NDRE']),
+    region: selectedPoint,
+    reducer: ee.Reducer.mean(),
+    scale: 10
+  }).setOptions({
+    title: 'Index Time Series',
+    vAxis: { title: 'Value' },
+    hAxis: { title: 'Date', format: 'MM-yy' },
+    lineWidth: 1,
+    pointSize: 3,
+  });
+  
+  sidePanel.widgets().set(7, chart);
+});
+
+ui.root.insert(0, sidePanel);
