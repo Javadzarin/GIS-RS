@@ -1,0 +1,40 @@
+// Define a date range for the analysis
+var startDate = '2014-01-01';
+var endDate = '2023-12-31';
+// Load Landsat 8 image collection filtered by date and region
+var l8Collection = ee.ImageCollection('LANDSAT/LC08/C01/T1_TOA')
+  .map(function(l8Collection){return l8Collection.clip(roi)})
+  //.filterBounds(roi)
+  .filterDate(startDate, endDate)
+  .sort('system:time_start')
+  .select(['B5', 'B6', 'BQA']); // Near-Infrared (B5), Shortwave Infrared 2 (B6), and QA band
+
+// Function to calculate NDNI
+var calculateNDNI = function(image) {
+  // Cloud and shadow masking using QA band
+  var clearMask = image.select('BQA').eq(2720); // Clear land pixels
+  var maskedImage = image.updateMask(clearMask);
+
+  var ndni = maskedImage.normalizedDifference(['B6', 'B5']).rename('NDNI');
+  return maskedImage.addBands(ndni);
+};
+
+// Map over the image collection and calculate NDNI for each image
+var l8CollectionWithNDNI = l8Collection.map(calculateNDNI);
+
+// Calculate mean NDNI over the collection
+var meanNDNI = l8CollectionWithNDNI.select('NDNI').mean();
+
+// Display mean NDNI
+Map.centerObject(roi)
+//Map.addLayer(roi);
+Map.addLayer(meanNDNI, {min: -1, max: 1, palette: ['blue', 'white', 'green']}, 'Mean NDNI');
+
+// Export mean NDNI as a GeoTIFF file
+Export.image.toDrive({
+  image: meanNDNI,
+  description: 'NDNI_2014_2023',
+  scale: 30, // Adjust the scale as needed
+  region: roi,
+  fileFormat: 'GeoTIFF'
+});
