@@ -1,0 +1,145 @@
+var bandList = ['SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'SR_B7'];
+var bandCheckboxes = bandList.map(function(band) {
+  return ui.Checkbox({
+    label: band,
+    value: false
+  });
+});
+
+var checkboxPanel = ui.Panel(bandCheckboxes, ui.Panel.Layout.flow('vertical'));
+var bandSelectPanel = ui.Panel({
+  widgets: [
+    ui.Label('Select Bands', {fontWeight: 'bold'}),
+    checkboxPanel
+  ],
+  layout: ui.Panel.Layout.flow('vertical'),
+  style: {stretch: 'vertical'}
+});
+
+var bandAccordion = ui.Panel({
+  widgets: [bandSelectPanel],
+  style: {stretch: 'horizontal'}
+});
+
+Map.add(bandAccordion);
+
+var statList = ['Mean', 'Median', 'Min', 'Max', 'Sum'];
+var statCheckboxes = statList.map(function(stat) {
+  return ui.Checkbox({
+    label: stat,
+    value: false
+  });
+});
+
+var statCheckboxPanel = ui.Panel(statCheckboxes, ui.Panel.Layout.flow('vertical'));
+var statSelectPanel = ui.Panel({
+  widgets: [
+    ui.Label('Select Statistics', {fontWeight: 'bold'}),
+    statCheckboxPanel
+  ],
+  layout: ui.Panel.Layout.flow('vertical'),
+  style: {stretch: 'vertical'}
+});
+
+var statAccordion = ui.Panel({
+  widgets: [statSelectPanel],
+  style: {stretch: 'horizontal'}
+});
+
+Map.add(statAccordion);
+
+var dateStart = ui.Textbox({value: '2022-01-01', placeholder: 'Start Date'});
+var dateEnd = ui.Textbox({value: '2024-04-15', placeholder: 'End Date'});
+Map.add(dateStart);
+Map.add(dateEnd);
+
+var samplingPointsLabel = ui.Label('Number of Sampling Points:');
+Map.add(samplingPointsLabel);
+
+var samplingPoints = ui.Textbox({
+  value: '100',
+  placeholder: 'Enter number of sampling points'
+});
+Map.add(samplingPoints);
+
+var sampleButton = ui.Button('Random Sampling');
+Map.add(sampleButton);
+
+function applyScaleFactors(image) {
+  return image.select(['SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'SR_B7'])
+             .multiply(0.0000275).add(-0.2);
+}
+
+sampleButton.onClick(function() {
+  var selectedBands = bandCheckboxes.filter(function(checkbox) {
+    return checkbox.getValue();
+  }).map(function(checkbox) {
+    return checkbox.getLabel();
+  });
+
+  var selectedStats = statCheckboxes.filter(function(checkbox) {
+    return checkbox.getValue();
+  }).map(function(checkbox) {
+    return checkbox.getLabel();
+  });
+
+  var startDate = dateStart.getValue();
+  var endDate = dateEnd.getValue();
+  var numPoints = parseInt(samplingPoints.getValue(), 10);
+
+  var collection = ee.ImageCollection('LANDSAT/LC09/C02/T1_L2')
+                    .filterDate(startDate, endDate)
+                    .filterBounds(geometry)
+                    .map(applyScaleFactors)
+                    .select(selectedBands);
+
+  selectedStats.forEach(function(stat) {
+    var composite;
+    switch (stat) {
+      case 'Mean':
+        composite = collection.mean();
+        break;
+      case 'Median':
+        composite = collection.median();
+        break;
+      case 'Min':
+        composite = collection.min();
+        break;
+      case 'Max':
+        composite = collection.max();
+        break;
+      case 'Sum':
+        composite = collection.sum();
+        break;
+    }
+
+    var randomPoints = ee.FeatureCollection.randomPoints({
+      region: geometry,
+      points: numPoints,
+      seed: 1,
+      maxError: 1
+    });
+    Map.addLayer(randomPoints, {color: 'red'}, 'Random Points');
+    var sampledPoints = composite.sampleRegions({
+      collection: randomPoints,
+      properties: ['longitude', 'latitude'],
+      scale: 30,
+      geometries: true
+    }).map(function(feature) {
+      return feature.set({
+        'longitude': feature.geometry().coordinates().get(0),
+        'latitude': feature.geometry().coordinates().get(1)
+      });
+    });
+
+    var filename = 'Random_Sampling_' + startDate.replace(/-/g, '') + '_' + endDate.replace(/-/g, '') + '_' + stat + '_' + selectedBands.join('-');
+
+    Export.table.toDrive({
+      collection: sampledPoints,
+      description: filename,
+      fileFormat: 'CSV'
+    });
+
+    print(stat + ' Sampled Points', sampledPoints);
+  });
+});
