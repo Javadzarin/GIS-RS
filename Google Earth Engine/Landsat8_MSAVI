@@ -1,0 +1,30 @@
+/////// MSAVI median Landsat8
+
+var landsat = ee.ImageCollection('LANDSAT/LC08/C01/T1_SR')
+.filterBounds (table)
+.filterDate ('2014-01-01','2023-12-31')
+//.filter(ee.Filter.eq('WRS_PATH',190))
+//.filter(ee.Filter.eq('WRS_ROW',24))
+.filter(ee.Filter.lessThan('CLOUD_COVER', 5))
+.map(function(img){
+  var rescale = img.divide (10000.0);
+  var msavi = rescale.expression(
+    '(2 * nir + 1 - sqrt(pow((2 * nir + 1), 2) - 8 * (nir - red)) ) / 2'
+    
+    ,{
+      'red' : rescale.select ('B4'),
+      'nir' : rescale.select ('B5')
+    })
+    return msavi;
+  })
+.mean()
+.clip(table);
+Map.addLayer(landsat)
+Export.image.toDrive({
+  image : landsat,
+  description : 'MSAVI_mean_LC8C2_2014_2023',
+  scale : 30, 
+   region : table,
+   maxPixels : 1e13});
+
+/////// MSAVI median Landsat8
