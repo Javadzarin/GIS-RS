@@ -1,0 +1,101 @@
+var dataset = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED');
+var startDateBox = ui.Textbox({
+  value: '2020-01-01',
+});
+var endDateBox = ui.Textbox({
+  value: '2020-01-20',  
+});
+var cloudCoverBox = ui.Textbox({
+  value: '10', 
+});
+var algaeSensitivityLabel = ui.Label('Algae Sensitivity: 0.05'); 
+var algaeSensitivitySlider = ui.Slider({
+  min: 0.05,
+  max: 0.95,
+  value: 0.05,
+  step: 0.05,
+  style: {stretch: 'horizontal'}, 
+});
+var visualizeButton = ui.Button({
+  label: 'Visualize Algal Blooms',
+  onClick: updateMap
+});
+var exportButton = ui.Button({
+  label: 'Export Layers to Drive',
+  onClick: function() {
+    exportLayers();
+  }
+});
+var panel = ui.Panel({
+  widgets: [
+    ui.Label('Start Date (YYYY-MM-DD):'), startDateBox,
+    ui.Label('End Date (YYYY-MM-DD):'), endDateBox,
+    ui.Label('Max Cloud Cover (%):'), cloudCoverBox,
+    algaeSensitivityLabel, algaeSensitivitySlider,
+    visualizeButton, exportButton
+  ],
+  style: {width: '300px', padding: '8px'}
+});
+ui.root.add(panel);
+function updateMap() {
+  var startDate = ee.Date(startDateBox.getValue());
+  var endDate = ee.Date(endDateBox.getValue());
+  var maxCloudCover = parseFloat(cloudCoverBox.getValue());
+  var algaeSensitivity = algaeSensitivitySlider.getValue();
+  var filtered = dataset
+    .filter(ee.Filter.date(startDate, endDate))
+    .filter(ee.Filter.bounds(geometry))
+    .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', maxCloudCover))
+    .median();
+  var ndci = filtered.normalizedDifference(['B5', 'B4']).rename('ndci');
+  var mndwi = filtered.normalizedDifference(['B3', 'B11']).rename('mndwi'); 
+  var algae = ndci.gt(algaeSensitivity).and(mndwi.gt(0.5));
+  var rgbVis = {min: 500, max: 2500, bands: ['B4', 'B3', 'B2']};
+  var ndwiVis = {min: 0, max: 1, palette: ['white', 'blue']};
+  var ndciVis = {min: 0, max: 1, palette: ['white', 'red']};
+  var algaeVis = {min: 0, max: 1, palette: ['white', '#31a354']};
+  Map.clear();
+  Map.centerObject(geometry);
+  Map.addLayer(filtered.clip(geometry), rgbVis, 'RGB Image');
+  Map.addLayer(mndwi.clip(geometry), ndwiVis, 'MNDWI');
+  Map.addLayer(ndci.clip(geometry), ndciVis, 'NDCI');
+  Map.addLayer(algae.clip(geometry).selfMask(), algaeVis, 'Algal Bloom');
+}
+function exportLayers() {
+  var startDate = startDateBox.getValue();
+  var endDate = endDateBox.getValue();
+  var maxCloudCover = parseFloat(cloudCoverBox.getValue());
+  var algaeSensitivity = algaeSensitivitySlider.getValue();
+  var filtered = dataset
+    .filter(ee.Filter.date(ee.Date(startDate), ee.Date(endDate)))
+    .filter(ee.Filter.bounds(geometry))
+    .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', maxCloudCover))
+    .median();
+  var ndci = filtered.normalizedDifference(['B5', 'B4']).rename('ndci');
+  var mndwi = filtered.normalizedDifference(['B3', 'B11']).rename('mndwi'); 
+  var algae = ndci.gt(algaeSensitivity).and(mndwi.gt(0.5));
+  Export.image.toDrive({
+    image: filtered.clip(geometry),
+    description: 'RGB_Image_' + startDate + '_to_' + endDate,
+    scale: 10,
+    region: geometry
+  });
+  Export.image.toDrive({
+    image: mndwi.clip(geometry),
+    description: 'MNDWI_' + startDate + '_to_' + endDate,
+    scale: 10,
+    region: geometry
+  });
+  Export.image.toDrive({
+    image: ndci.clip(geometry),
+    description: 'NDCI_' + startDate + '_to_' + endDate,
+    scale: 10,
+    region: geometry
+  });
+  Export.image.toDrive({
+    image: algae.clip(geometry).selfMask(),
+    description: 'Algae_Bloom_' + startDate + '_to_' + endDate,
+    scale: 10,
+    region: geometry
+  });
+}
