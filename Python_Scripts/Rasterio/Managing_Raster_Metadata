@@ -1,0 +1,33 @@
+import rasterio
+
+# Path to the raster file
+input_raster_path = 'path_to_your_raster_file.tif'
+
+# Opening the raster file to access metadata
+with rasterio.open(input_raster_path) as src:
+    # Accessing metadata
+    original_metadata = src.meta.copy()
+
+    # Print original metadata
+    print("Original Metadata:")
+    print(original_metadata)
+
+    # Modifying metadata
+    # Suppose you need to update the CRS and data type
+    new_metadata = original_metadata.copy()
+    new_metadata.update({
+        'crs': '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs',  # Change CRS to WGS84
+        'dtype': 'float32'  # Change data type to float32
+    })
+
+    # Path to the output raster file with updated metadata
+    output_raster_path = 'path_to_modified_metadata_raster_file.tif'
+
+    # Writing a new raster file with updated metadata
+    with rasterio.open(output_raster_path, 'w', **new_metadata) as dst:
+        # Read each band from the source and write it to the destination
+        for i in range(1, src.count + 1):
+            data = src.read(i)
+            dst.write(data, i)
+
+# Note: This script changes the metadata, but you should ensure that any changes in dtype or CRS are compatible with your data.
