@@ -1,0 +1,42 @@
+# Load necessary libraries
+if (!requireNamespace("ggplot2", quietly = TRUE))
+    install.packages("ggplot2")
+library(ggplot2)
+
+if (!requireNamespace("factoextra", quietly = TRUE))
+    install.packages("factoextra")
+library(factoextra)
+
+# Load the Iris dataset
+data("iris")
+
+# Standardizing the data
+iris_scaled <- scale(iris[, 1:4])
+
+# Performing PCA
+pca_result <- prcomp(iris_scaled, center = TRUE, scale. = TRUE)
+
+# Summary of the PCA results
+pca_summary <- summary(pca_result)
+print("PCA Summary:")
+print(pca_summary)
+
+# Plotting explained variance
+fviz_eig(pca_result, addlabels = TRUE, ylim = c(0, 100),
+         barfill = "skyblue", barcolor = "red",
+         main = "Scree Plot of Principal Components",
+         ylab = "Variance Percentage Explained",
+         xlab = "Principal Components")
+
+# Biplot of the first two principal components
+fviz_pca_biplot(pca_result, label = "none", 
+                geom = c("point", "arrow"), 
+                col.ind = iris$Species, # Color by species
+                addEllipses = TRUE,
+                ellipse.type = "confidence",
+                title = "PCA Biplot with Confidence Ellipses",
+                gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"))
+
+# Save PCA plots
+ggsave("pca_explained_variance.png", width = 10, height = 6)
+ggsave("pca_biplot.png", width = 10, height = 8)
