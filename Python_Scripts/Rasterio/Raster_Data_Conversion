@@ -1,0 +1,39 @@
+import rasterio
+from rasterio.enums import Resampling
+import geopandas as gpd
+from shapely.geometry import Polygon
+
+# Path to the input and output raster files
+input_raster_path = 'path_to_your_raster_file.tif'
+output_raster_path = 'converted_raster_file.jpg'  # Converting to JPEG
+
+# Open the input raster file
+with rasterio.open(input_raster_path) as src:
+    # Read the data of the first band
+    data = src.read(1)
+    
+    # Define metadata for the output raster with new format
+    out_meta = src.meta.copy()
+    out_meta.update({
+        'driver': 'JPEG',  # Change driver to JPEG for output
+        'dtype': 'uint8'   # Change data type to uint8 for JPEG compatibility
+    })
+
+    # Write the data to the new format
+    with rasterio.open(output_raster_path, 'w', **out_meta) as dst:
+        dst.write(data, 1)
+
+# Example of converting raster data to a vector format
+# Assuming the raster is a binary mask where pixels of interest are marked by 1
+with rasterio.open(input_raster_path) as src:
+    band1 = src.read(1)
+    mask = band1 == 1  # Create a mask where the pixels of interest are marked
+    shapes = rasterio.features.shapes(band1, mask=mask, transform=src.transform)
+
+    # Create polygons from raster shapes
+    polygons = [Polygon(shape[0]['coordinates'][0]) for shape in shapes if shape[1] == 1]
+    gdf = gpd.GeoDataFrame({'geometry': polygons}, crs=src.crs)
+
+    # Save to a GeoJSON file
+    vector_output_path = 'raster_to_vector.geojson'
+    gdf.to_file(vector_output_path, driver='GeoJSON')
