@@ -1,0 +1,43 @@
+# Load necessary libraries
+if (!requireNamespace("stats", quietly = TRUE))
+    install.packages("stats")
+library(stats)
+
+if (!requireNamespace("cluster", quietly = TRUE))
+    install.packages("cluster")
+library(cluster)
+
+if (!requireNamespace("factoextra", quietly = TRUE))
+    install.packages("factoextra")
+library(factoextra)
+
+# Load the Iris dataset
+data("iris")
+
+# Standardizing the data to make it suitable for clustering
+iris_scaled <- scale(iris[, 1:4])
+
+# Hierarchical Clustering
+# Compute distance matrix
+dist_matrix <- dist(iris_scaled, method = "euclidean")
+hc <- hclust(dist_matrix, method = "ward.D2")
+
+# Plot the dendrogram
+plot(hc, main = "Hierarchical Clustering Dendrogram", xlab = "", sub = "",
+     cex = 0.9, labels = FALSE)
+
+# Cutting the dendrogram to form 3 clusters
+clusters_hc <- cutree(hc, k = 3)
+
+# K-means Clustering
+set.seed(123)  # for reproducibility
+kmeans_result <- kmeans(iris_scaled, centers = 3, nstart = 25)
+
+# Plotting K-means clusters
+fviz_cluster(list(data = iris_scaled, cluster = kmeans_result$cluster),
+             geom = "point", stand = FALSE, frame.type = "norm",
+             main = "K-means Clustering of Iris Dataset")
+
+# Save cluster plots
+ggsave("hierarchical_clustering.png", width = 10, height = 8)
+ggsave("kmeans_clustering.png", width = 10, height = 8)
