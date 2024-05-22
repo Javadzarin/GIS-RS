@@ -1,0 +1,37 @@
+import rasterio
+from rasterio.enums import Resampling
+
+# Path to the raster file
+input_raster_path = 'path_to_your_raster_file.tif'
+# Path for the resampled output
+output_raster_path = 'path_to_resampled_raster_file.tif'
+
+# Desired scaling factors
+scale_factor = 0.5  # Example: Reduce resolution by half
+
+# Open the input raster file
+with rasterio.open(input_raster_path) as src:
+    # Calculate the new dimensions
+    new_width = int(src.width * scale_factor)
+    new_height = int(src.height * scale_factor)
+
+    # Define metadata for the output raster
+    meta = src.meta.copy()
+    meta.update({
+        'width': new_width,
+        'height': new_height,
+        'transform': src.transform * src.transform.scale(
+            (src.width / new_width),
+            (src.height / new_height)
+        )
+    })
+
+    # Resample and write to the output raster file
+    with rasterio.open(output_raster_path, 'w', **meta) as dst:
+        for i in range(1, src.count + 1):
+            data = src.read(
+                i,
+                out_shape=(new_height, new_width),
+                resampling=Resampling.bilinear  # Change resampling method as needed
+            )
+            dst.write(data, i)
