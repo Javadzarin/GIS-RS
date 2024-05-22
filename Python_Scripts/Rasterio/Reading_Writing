@@ -1,0 +1,38 @@
+import numpy as np
+import rasterio
+from rasterio.plot import show
+
+# Path to the raster file
+input_raster_path = 'path_to_your_raster_file.tif'
+output_raster_path = 'path_to_new_raster_file.tif'
+
+# Open and read a raster file
+with rasterio.open(input_raster_path) as src:
+    # Read the first band
+    band1 = src.read(1)
+    
+    # Access and print metadata
+    print("Metadata:", src.meta)
+    
+    # Show the raster
+    show(band1)
+
+    # Modify the data in some way
+    # Example: Increase brightness where pixel values are greater than 100
+    modified_data = np.where(band1 > 100, band1 + 50, band1)
+    modified_data = np.clip(modified_data, 0, 255)  # Ensure pixel values are within 8-bit range
+
+    # Define new metadata for the output file
+    new_meta = src.meta.copy()
+    new_meta.update({
+        'dtype': 'uint8',
+        'count': 1,  # Number of bands
+        'compress': 'lzw'  # Lossless compression
+    })
+
+    # Write the modified raster to a new file
+    with rasterio.open(output_raster_path, 'w', **new_meta) as dst:
+        dst.write(modified_data.astype('uint8'), 1)  # Write modified data to the first band
+
+# The above code block demonstrates how to read a raster file, visualize it,
+# modify its data, and write the changes to a new raster file using rasterio.
