@@ -1,0 +1,27 @@
+import rasterio
+from rasterio.transform import rowcol
+
+# Path to the raster file
+input_raster_path = 'path_to_your_raster_file.tif'
+
+# Coordinates for which to extract pixel values
+coordinates_list = [(longitude1, latitude1), (longitude2, latitude2)]
+
+# Open the raster file
+with rasterio.open(input_raster_path) as src:
+    # Convert geographic coordinates to raster indices
+    for coords in coordinates_list:
+        row, col = rowcol(src.transform, coords[0], coords[1])
+        # Extract the pixel value at the specified index
+        pixel_value = src.read(1)[row, col]  # Reading from the first band
+        print(f"Pixel value at {coords}: {pixel_value}")
+
+    # Example of conditional extraction: Extracting all values above a threshold
+    # Read the whole band
+    band_data = src.read(1)
+    # Define a condition
+    threshold = 100
+    # Use a boolean mask to find all pixels above the threshold
+    high_values_indices = band_data > threshold
+    high_values = band_data[high_values_indices]
+    print(f"Extracted high values (>{threshold}):", high_values)
