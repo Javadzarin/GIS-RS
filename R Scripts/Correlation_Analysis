@@ -1,0 +1,39 @@
+# Load necessary libraries
+if (!requireNamespace("corrplot", quietly = TRUE))
+    install.packages("corrplot")
+library(corrplot)
+
+if (!requireNamespace("Hmisc", quietly = TRUE))
+    install.packages("Hmisc")
+library(Hmisc)
+
+# Load the Iris dataset
+data("iris")
+
+# Compute Pearson Correlation Matrix
+pearson_corr <- cor(iris[, 1:4], method = "pearson")
+
+# Compute Spearman Correlation Matrix
+spearman_corr <- cor(iris[, 1:4], method = "spearman")
+
+# Print Pearson Correlation Matrix
+print("Pearson Correlation Matrix:")
+print(pearson_corr)
+
+# Print Spearman Correlation Matrix
+print("Spearman Correlation Matrix:")
+print(spearman_corr)
+
+# Visualizing Pearson Correlation Matrix
+corrplot(pearson_corr, type = "upper", order = "hclust",
+         tl.col = "black", tl.srt = 45, 
+         title = "Pearson Correlation Matrix of Iris Dataset")
+
+# Visualizing Spearman Correlation Matrix
+corrplot(spearman_corr, type = "lower", order = "hclust",
+         tl.col = "black", tl.srt = 45,
+         title = "Spearman Correlation Matrix of Iris Dataset")
+
+# Save the correlation plots
+ggsave("pearson_corr_plot.png", width = 8, height = 6)  # Save Pearson correlation plot to a file
+ggsave("spearman_corr_plot.png", width = 8, height = 6)  # Save Spearman correlation plot to a file
