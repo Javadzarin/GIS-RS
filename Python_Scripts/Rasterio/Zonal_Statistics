@@ -1,0 +1,26 @@
+import rasterio
+import geopandas as gpd
+from rasterstats import zonal_stats
+
+# Path to the raster and vector files
+input_raster_path = 'path_to_your_raster_file.tif'
+input_vector_path = 'path_to_your_vector_file.shp'
+
+# Load the vector data using Geopandas
+vector_data = gpd.read_file(input_vector_path)
+
+# Calculate zonal statistics
+statistics = zonal_stats(vector_data, input_raster_path, stats=['mean', 'max', 'min', 'sum'], all_touched=True)
+
+# Add statistics back to the Geopandas DataFrame
+vector_data['mean'] = [stat['mean'] for stat in statistics]
+vector_data['max'] = [stat['max'] for stat in statistics]
+vector_data['min'] = [stat['min'] for stat in statistics]
+vector_data['sum'] = [stat['sum'] for stat in statistics]
+
+# Print or save the updated GeoDataFrame
+print(vector_data.head())
+
+# Optionally, save the updated DataFrame to a new Shapefile
+output_vector_path = 'path_to_output_vector_file_with_stats.shp'
+vector_data.to_file(output_vector_path)
