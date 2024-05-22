@@ -1,0 +1,54 @@
+# Load necessary libraries
+if (!requireNamespace("caret", quietly = TRUE))
+    install.packages("caret")
+library(caret)
+
+if (!requireNamespace("pROC", quietly = TRUE))
+    install.packages("pROC")
+library(pROC)
+
+# Load the Iris dataset
+data("iris")
+
+# Splitting the dataset into training and test sets
+set.seed(123)  # for reproducibility
+indices <- createDataPartition(iris$Species, p = 0.8, list = FALSE)
+training_data <- iris[indices,]
+test_data <- iris[-indices,]
+
+# Train a model for demonstration - using Random Forests here
+rf_model <- train(Species ~ ., data = training_data, method = "rf",
+                  trControl = trainControl(method = "cv", number = 10, savePredictions = "final"))
+
+# Model predictions on test set
+rf_predictions <- predict(rf_model, test_data)
+
+# Confusion Matrix
+conf_matrix <- confusionMatrix(rf_predictions, test_data$Species)
+
+# Print the confusion matrix
+print("Confusion Matrix:")
+print(conf_matrix)
+
+# Cross-Validation Results
+print("Cross-Validation Results:")
+print(rf_model$resample)
+
+# ROC Curve and AUC for a multi-class model require binary class comparisons.
+# Using binary relevance approach - one-vs-rest strategy for multi-class to binary transformation
+roc_results <- lapply(levels(training_data$Species), function(class) {
+  # Convert factor to binary
+  truth_bin <- ifelse(test_data$Species == class, "yes", "no")
+  prob_yes <- rf_model$pred[, class]
+  roc_curve <- roc(truth_bin, prob_yes, levels = c("no", "yes"))
+  auc_value <- auc(roc_curve)
+  plot(roc_curve, main = paste("ROC Curve for class", class))
+  return(list(AUC = auc_value, ROC = roc_curve))
+})
+
+# Print ROC and AUC results
+print("ROC and AUC Results:")
+print(roc_results)
+
+# Save ROC plots if needed
+ggsave("roc_plot.png", width = 10, height = 8)
