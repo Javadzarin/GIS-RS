@@ -1,0 +1,43 @@
+import rasterio
+from rasterio.plot import show
+import matplotlib.pyplot as plt
+
+# Path to a multi-band raster file
+input_raster_path = 'path_to_your_multiband_raster_file.tif'
+
+# Open the raster file
+with rasterio.open(input_raster_path) as src:
+    # Reading multiple bands
+    band1 = src.read(1)  # Read the first band
+    band2 = src.read(2)  # Read the second band
+    band3 = src.read(3)  # Read the third band
+
+    # Combining bands to create a color composite image
+    color_composite = np.dstack((band3, band2, band1))  # Commonly used order for true color composite
+    
+    # Display the color composite
+    plt.figure(figsize=(10, 10))
+    plt.imshow(color_composite)
+    plt.title('Color Composite Image')
+    plt.xlabel('Longitude')
+    plt.ylabel('Latitude')
+    plt.show()
+
+    # If needed, split bands into separate files
+    output_raster_path1 = 'path_to_output_band1.tif'
+    output_raster_path2 = 'path_to_output_band2.tif'
+    output_raster_path3 = 'path_to_output_band3.tif'
+
+    # Metadata for output files
+    meta = src.meta.copy()
+    meta.update(count=1)
+
+    # Write each band to a separate file
+    with rasterio.open(output_raster_path1, 'w', **meta) as dst1:
+        dst1.write(band1, 1)
+
+    with rasterio.open(output_raster_path2, 'w', **meta) as dst2:
+        dst2.write(band2, 1)
+
+    with rasterio.open(output_raster_path3, 'w', **meta) as dst3:
+        dst3.write(band3, 1)
