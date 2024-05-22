@@ -1,0 +1,44 @@
+# Load necessary libraries
+if (!requireNamespace("stats", quietly = TRUE))
+    install.packages("stats")
+library(stats)
+
+# Load the Iris dataset
+data("iris")
+
+# ANOVA for each feature
+anova_results <- lapply(iris[1:4], function(x) {
+  formula <- as.formula(paste("x ~ Species"))
+  anova(lm(formula, data = transform(iris, x = x)))
+})
+
+# Print ANOVA results
+print("ANOVA Results:")
+print(anova_results)
+
+# Post-hoc analysis with Tukey HSD if ANOVA is significant
+post_hoc_results <- lapply(names(iris[1:4]), function(feature) {
+  anova_res <- aov(as.formula(paste(feature, "~ Species")), data = iris)
+  if (summary(anova_res)[[1]]["Pr(>F)"][1] < 0.05) {  # Check if p-value is less than 0.05
+    TukeyHSD(anova_res)
+  } else {
+    paste("No significant differences found in", feature)
+  }
+})
+
+# Print post-hoc test results
+print("Post-hoc Test Results:")
+print(post_hoc_results)
+
+# Optional: Visualizing the results
+if (!requireNamespace("ggplot2", quietly = TRUE))
+    install.packages("ggplot2")
+library(ggplot2)
+
+# Boxplots for visual inspection of data distributions
+lapply(names(iris[1:4]), function(feature) {
+  ggplot(iris, aes(x = Species, y = iris[[feature]], fill = Species)) +
+    geom_boxplot() +
+    labs(title = paste("Distribution of", feature, "across Species"), x = "Species", y = feature) +
+    theme_minimal()
+})
