@@ -1,0 +1,54 @@
+# Load necessary libraries
+if (!requireNamespace("MASS", quietly = TRUE))
+    install.packages("MASS")
+library(MASS)
+
+if (!requireNamespace("caret", quietly = TRUE))
+    install.packages("caret")
+library(caret)
+
+if (!requireNamespace("randomForest", quietly = TRUE))
+    install.packages("randomForest")
+library(randomForest)
+
+if (!requireNamespace("e1071", quietly = TRUE))
+    install.packages("e1071")
+library(e1071)
+
+# Load the Iris dataset
+data("iris")
+
+# Splitting the dataset into training and test sets
+set.seed(123)  # for reproducibility
+indices <- createDataPartition(iris$Species, p = 0.8, list = FALSE)
+training_data <- iris[indices,]
+test_data <- iris[-indices,]
+
+# Linear Discriminant Analysis (LDA)
+lda_model <- lda(Species ~ ., data = training_data)
+lda_pred <- predict(lda_model, test_data)
+confusionMatrix(lda_pred$class, test_data$Species)
+
+# Logistic Regression
+log_model <- glm(Species ~ ., data = training_data, family = binomial())
+log_pred <- predict(log_model, test_data, type = "response")
+log_pred_final <- factor(ifelse(log_pred > 0.5, "versicolor", "setosa"),
+                         levels = levels(test_data$Species))
+confusionMatrix(log_pred_final, test_data$Species)
+
+# Decision Trees
+tree_model <- rpart(Species ~ ., data = training_data, method = "class")
+tree_pred <- predict(tree_model, test_data, type = "class")
+confusionMatrix(tree_pred, test_data$Species)
+
+# Random Forests
+rf_model <- randomForest(Species ~ ., data = training_data, ntree = 500)
+rf_pred <- predict(rf_model, test_data)
+confusionMatrix(rf_pred, test_data$Species)
+
+# Support Vector Machines (SVM)
+svm_model <- svm(Species ~ ., data = training_data, kernel = "radial")
+svm_pred <- predict(svm_model, test_data)
+confusionMatrix(svm_pred, test_data$Species)
+
+# Save model outputs or further analyze results as needed
