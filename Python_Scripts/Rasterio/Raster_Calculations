@@ -1,0 +1,30 @@
+import rasterio
+import numpy as np
+
+# Path to the raster files
+input_raster_path1 = 'path_to_your_first_raster_file.tif'
+input_raster_path2 = 'path_to_your_second_raster_file.tif'
+output_raster_path = 'path_to_calculated_raster_file.tif'
+
+# Open the first raster file
+with rasterio.open(input_raster_path1) as src1:
+    # Read the first band
+    band1 = src1.read(1)
+
+    # Open the second raster file
+    with rasterio.open(input_raster_path2) as src2:
+        # Read the first band
+        band2 = src2.read(1)
+
+        # Ensure both rasters have the same shape
+        assert band1.shape == band2.shape, "Raster dimensions do not match"
+
+        # Perform a raster calculation (e.g., subtract band2 from band1)
+        calculated_band = band1 - band2
+
+        # Define metadata for the output raster based on the first raster
+        meta = src1.meta.copy()
+
+        # Write the result of the calculation to a new raster file
+        with rasterio.open(output_raster_path, 'w', **meta) as dst:
+            dst.write(calculated_band, 1)
