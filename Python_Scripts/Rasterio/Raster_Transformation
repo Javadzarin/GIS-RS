@@ -1,0 +1,50 @@
+import rasterio
+import numpy as np
+from rasterio.warp import reproject, Resampling
+from affine import Affine
+
+# Path to the raster file
+input_raster_path = 'path_to_your_raster_file.tif'
+# Path for the transformed output
+output_raster_path = 'path_to_transformed_raster_file.tif'
+
+# Open the input raster file
+with rasterio.open(input_raster_path) as src:
+    # Read the data of the first band
+    data = src.read(1)
+    
+    # Define transformation: rotation by 90 degrees
+    rotation_angle = np.deg2rad(90)  # Convert degrees to radians
+    rotation_transform = Affine.rotation(rotation_angle)
+    
+    # Adjust the transform to include rotation
+    transformed_affine = src.transform * rotation_transform
+
+    # Define new dimensions if necessary (e.g., if rotating 90 degrees)
+    new_width, new_height = src.height, src.width  # Swap dimensions for 90-degree rotation
+
+    # Define metadata for the output raster
+    meta = src.meta.copy()
+    meta.update({
+        'width': new_width,
+        'height': new_height,
+        'transform': transformed_affine
+    })
+
+    # Prepare an empty array for the transformed data
+    transformed_data = np.empty(shape=(new_height, new_width), dtype=rasterio.float32)
+
+    # Perform the transformation using reproject
+    reproject(
+        source=data,
+        destination=transformed_data,
+        src_transform=src.transform,
+        src_crs=src.crs,
+        dst_transform=transformed_affine,
+        dst_crs=src.crs,
+        resampling=Resampling.nearest  # Nearest neighbor resampling
+    )
+
+    # Write the transformed data to a new raster file
+    with rasterio.open(output_raster_path, 'w', **meta) as dst:
+        dst.write(transformed_data, 1)
