@@ -1,0 +1,38 @@
+import rasterio
+from rasterio.plot import show
+import matplotlib.pyplot as plt
+
+# Path to the raster file
+input_raster_path = 'path_to_your_raster_file.tif'
+
+# Open the raster file
+with rasterio.open(input_raster_path) as src:
+    # Read the first band
+    band1 = src.read(1)
+    
+    # Plot the raster data
+    plt.figure(figsize=(10, 10))
+    show(band1, transform=src.transform, cmap='viridis')  # Applying the spatial transformation and color map
+    
+    # Adding title and labels
+    plt.title('Raster Band 1 Visualization')
+    plt.xlabel('Longitude')
+    plt.ylabel('Latitude')
+
+    # Display the plot
+    plt.show()
+
+# Additional visualization: Histogram of the raster data
+with rasterio.open(input_raster_path) as src:
+    # Read the first band
+    band1 = src.read(1)
+    
+    # Create a histogram
+    plt.figure(figsize=(8, 6))
+    plt.hist(band1.ravel(), bins=256, color='green', alpha=0.8)
+    plt.title('Histogram of Raster Values')
+    plt.xlabel('Pixel Values')
+    plt.ylabel('Frequency')
+    
+    # Display the histogram
+    plt.show()
