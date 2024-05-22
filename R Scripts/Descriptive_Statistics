@@ -1,0 +1,59 @@
+# Load necessary library
+if (!requireNamespace("dplyr", quietly = TRUE))
+    install.packages("dplyr")
+library(dplyr)
+
+# Load the Iris dataset
+data("iris")
+
+# Calculate descriptive statistics for numeric data
+summary_stats <- iris %>% 
+  summarise(
+    Sepal.Length.mean = mean(Sepal.Length),
+    Sepal.Length.median = median(Sepal.Length),
+    Sepal.Length.variance = var(Sepal.Length),
+    Sepal.Length.sd = sd(Sepal.Length),
+    Sepal.Length.range = max(Sepal.Length) - min(Sepal.Length),
+
+    Sepal.Width.mean = mean(Sepal.Width),
+    Sepal.Width.median = median(Sepal.Width),
+    Sepal.Width.variance = var(Sepal.Width),
+    Sepal.Width.sd = sd(Sepal.Width),
+    Sepal.Width.range = max(Sepal.Width) - min(Sepal.Width),
+
+    Petal.Length.mean = mean(Petal.Length),
+    Petal.Length.median = median(Petal.Length),
+    Petal.Length.variance = var(Petal.Length),
+    Petal.Length.sd = sd(Petal.Length),
+    Petal.Length.range = max(Petal.Length) - min(Petal.Length),
+
+    Petal.Width.mean = mean(Petal.Width),
+    Petal.Width.median = median(Petal.Width),
+    Petal.Width.variance = var(Petal.Width),
+    Petal.Width.sd = sd(Petal.Width),
+    Petal.Width.range = max(Petal.Width) - min(Petal.Width)
+  )
+
+# Print summary statistics
+print("Summary Statistics for Numerical Data:")
+print(summary_stats)
+
+# Frequency counts for categorical data
+species_count <- table(iris$Species)
+
+# Print frequency counts
+print("Frequency Counts for Species:")
+print(species_count)
+
+# Optional: Handling mode since R does not have a built-in mode function
+mode_function <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+# Calculate mode for each numeric feature
+modes <- sapply(iris[, 1:4], mode_function)
+
+# Print mode values
+print("Mode for each numeric feature:")
+print(modes)
