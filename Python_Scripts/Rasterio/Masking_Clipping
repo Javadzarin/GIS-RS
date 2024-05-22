@@ -1,0 +1,35 @@
+import rasterio
+from rasterio.mask import mask
+import geopandas as gpd
+
+# Path to the raster file and the shapefile
+input_raster_path = 'path_to_your_raster_file.tif'
+input_shapefile_path = 'path_to_your_shapefile.shp'
+output_raster_path = 'path_to_masked_raster_file.tif'
+
+# Load the vector data (shapefile) using Geopandas
+shapefile = gpd.read_file(input_shapefile_path)
+
+# Make sure the CRS matches between the raster and the shapefile
+# If not, reproject the shapefile to match the raster's CRS
+with rasterio.open(input_raster_path) as src:
+    if shapefile.crs != src.crs:
+        shapefile = shapefile.to_crs(src.crs)
+
+    # Get the geometry in the correct format from the shapefile
+    geometries = shapefile['geometry'].values  # assuming there is a 'geometry' column in the shapefile
+    # Perform the mask operation to clip the raster with the polygon
+    out_image, out_transform = mask(src, geometries, crop=True)
+    
+    # Define metadata for the output raster
+    out_meta = src.meta.copy()
+    out_meta.update({
+        "driver": "GTiff",
+        "height": out_image.shape[1],
+        "width": out_image.shape[2],
+        "transform": out_transform
+    })
+
+    # Write the masked raster to a new file
+    with rasterio.open(output_raster_path, 'w', **out_meta) as dest:
+        dest.write(out_image)
