@@ -1,0 +1,23 @@
+import geopandas as gpd
+import matplotlib.pyplot as plt
+
+# Load two sample geospatial datasets
+world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+cities = gpd.read_file(gpd.datasets.get_path('naturalearth_cities'))
+
+# Ensure that both GeoDataFrames are using the same coordinate reference system
+cities = cities.to_crs(world.crs)
+
+# Performing a spatial join: adding information from 'world' to 'cities' based on their location
+joined_data = gpd.sjoin(cities, world, how='inner', op='within')
+
+# Display the results of the join
+print(joined_data.head())
+
+# Plotting to visualize the results
+fig, ax = plt.subplots(1, figsize=(10, 10))
+world.plot(ax=ax, color='lightgrey')
+cities.plot(ax=ax, color='red', markersize=10)  # cities are marked with red
+joined_data.plot(ax=ax, color='blue', markersize=5)  # joined entries are marked with blue
+ax.set_title('Spatial Join: Cities within Countries')
+plt.show()
