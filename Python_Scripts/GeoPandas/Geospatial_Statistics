@@ -1,0 +1,35 @@
+import geopandas as gpd
+from libpysal.weights import Queen
+from esda.moran import Moran
+import matplotlib.pyplot as plt
+
+# Load a sample geospatial dataset
+world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+
+# For this example, let's analyze the spatial autocorrelation of GDP per capita
+world['gdp_per_cap'] = world['gdp_md_est'] / world['pop_est'] * 1e6  # Convert to USD for consistency
+
+# Create spatial weights based on the Queen contiguity method
+# Queen contiguity: two polygons are neighbors if they share a vertex or edge
+w_queen = Queen.from_dataframe(world)
+
+# Row-standardize the weights
+w_queen.transform = 'r'
+
+# Calculate Moran's I statistic for spatial autocorrelation
+moran = Moran(world['gdp_per_cap'], w_queen)
+
+# Print results
+print("Moran's I statistic:", moran.I)
+print("Expected Moran's I under random assumption:", moran.EI)
+print("p-value of the Moran's I statistic:", moran.p_sim)
+
+# Plot the Moran's scatterplot
+fig, ax = plt.subplots(figsize=(8, 6))
+ax.scatter(world['gdp_per_cap'], moran.z)
+ax.axhline(0, color='black', linestyle='--')
+ax.axvline(moran.EI, color='red', linestyle='--')
+ax.set_title("Moran's I Scatterplot")
+ax.set_xlabel("GDP per Capita")
+ax.set_ylabel("Spatial Lag of GDP per Capita")
+plt.show()
