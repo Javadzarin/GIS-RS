@@ -1,0 +1,39 @@
+import geopandas as gpd
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Assuming we have spatio-temporal data of vehicle positions recorded over time
+# Sample data creation for demonstration
+data = {
+    'time': pd.date_range(start='2020-01-01', periods=4, freq='D'),
+    'x': [0, 1, 2, 3],
+    'y': [0, 1, 0, 1],
+    'vehicle_id': ['A', 'A', 'B', 'B']
+}
+gdf = gpd.GeoDataFrame(data, geometry=gpd.points_from_xy(data['x'], data['y']))
+
+# Set the coordinate reference system
+gdf.set_crs(epsg=4326, inplace=True)
+
+# Plotting vehicle tracks over time
+fig, ax = plt.subplots(figsize=(8, 6))
+
+# Group by vehicle and plot each vehicle's path
+for vehicle_id, group in gdf.groupby('vehicle_id'):
+    group.plot(ax=ax, marker='o', label=f'Vehicle {vehicle_id}', column='time', markersize=100, cmap='viridis')
+
+ax.set_title('Vehicle Movements Over Time')
+ax.legend()
+plt.show()
+
+# Analysis: Calculate the distance traveled by each vehicle
+# First, ensure the data is sorted by time for each vehicle
+gdf.sort_values(by=['vehicle_id', 'time'], inplace=True)
+
+# Calculate the distance between consecutive locations for each vehicle
+gdf['distance'] = gdf.groupby('vehicle_id').geometry.shift().distance(gdf.geometry)
+
+# Summarize the total distance traveled by each vehicle
+total_distance = gdf.groupby('vehicle_id')['distance'].sum()
+print("Total distance traveled by each vehicle:")
+print(total_distance)
