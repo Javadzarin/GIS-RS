@@ -1,0 +1,34 @@
+import geopandas as gpd
+
+# Load Shapefile
+gdf = gpd.read_file('path/to/your/file.shp')
+
+# Display the first few rows of the GeoDataFrame
+print(gdf.head())
+
+# Check the data types
+print(gdf.dtypes)
+
+# Get basic statistics
+print(gdf.describe())
+
+# Plot the GeoDataFrame
+gdf.plot()
+
+import matplotlib.pyplot as plt
+
+# Plot with customizations
+gdf.plot(column='your_column', cmap='Blues', legend=True)
+
+# Show the plot
+plt.show()
+
+# Load a polygon GeoDataFrame
+polygon_gdf = gpd.read_file('path/to/polygon/file.shp')
+
+# Perform spatial join
+points_in_polygon = gpd.sjoin(gdf, polygon_gdf, op='within')
+
+# Display the result
+print(points_in_polygon.head())
+
