@@ -1,0 +1,100 @@
+import matplotlib.pyplot as plt
+import rasterio as rio
+
+# Path to our raster file
+data_file = "./data/"
+
+# ID of the raster we want to open
+ID = "LC08_L2SP_175083_20131218_20200912_02_T1"
+
+# Open the red band (B4):
+B4 = rio.open(data_file + '{}/{}_SR_B4.TIF'.format(ID, ID))
+
+# Display the band
+fig, ax = plt.subplots(figsize=(10, 10))
+ax.imshow(B4.read(1), cmap='pink')
+
+print(B4.crs) # Gives coordinate reference system
+print(B4.transform) # Affine transformation matrix
+
+# convert array positions to UTM coordinates
+x,y = (1000,2000)
+utmx,utmy = B4.xy(y,x)
+print("\n"+ str((utmx,utmy))) 
+
+from rasterio.warp import reproject, Resampling
+from affine import Affine
+import numpy as np
+
+def rotate_raster(in_file,out_file, angle, shift_x=0, shift_y=0,adj_width=0, adj_height=0):
+    """Rotate a raster image and save it to disk.
+            in_file: path to input raster file
+            out_file: path to output raster file
+            angle: angle of rotation in degrees
+            shift_x: shift in x direction
+            shift_y: shift in y direction
+            adj_width: adjust width of output raster
+            adj_height: adjust height of output raster"""
+
+    with rio.open(in_file) as src:
+
+        # Get the old transform and crs
+        src_transform = src.transform 
+        crs = src.crs
+
+        # Affine transformations for rotation and translation
+        rotate = Affine.rotation(angle)
+        trans_x = Affine.translation(shift_x,0)
+        trans_y = Affine.translation(0, -shift_y)
+
+        # Combine affine transformations
+        dst_transform = src_transform * rotate * trans_x * trans_y
+
+        # Get band data
+        band = np.array(src.read(1))
+
+        # Get the new shape
+        y,x = band.shape
+        dst_height = y + adj_height
+        dst_width = x + adj_width
+
+        # set properties for output
+        dst_kwargs = src.meta.copy()
+        dst_kwargs.update(
+            {
+                "transform": dst_transform,
+                "height": dst_height,
+                "width": dst_width,
+                "nodata": 0,  
+            }
+        )
+
+        # write to disk
+        with rio.open(out_file, "w", **dst_kwargs) as dst:
+            # reproject to new CRS
+
+            reproject(source=band,
+                        destination=rio.band(dst, 1),
+                        src_transform=src_transform,
+                        src_crs=crs,
+                        dst_transform=dst_transform,
+                        dst_crs=crs,
+                        resampling=Resampling.nearest)
+
+file = data_file + '{}/{}_SR_B4.TIF'.format(ID, ID)
+out_file = data_file + '{}/{}_SR_B4_rotated.TIF'.format(ID, ID)
+
+rotate_raster(file,out_file, 12, shift_x=600, shift_y=700)
+
+out_file = data_file + '{}/{}_SR_B4_noshift.TIF'.format(ID, ID)
+
+rotate_raster(file,out_file, 12)
+
+#With dimensions adjustment
+out_file_1 = data_file + '{}/{}_SR_B4_adjust.TIF'.format(ID, ID)
+rotate_raster(file,out_file_1, 30,800,2800,adj_width=800, adj_height=800)
+
+#Without dimensions adjustment
+out_file_2 = data_file + '{}/{}_SR_B4_noadjust.TIF'.format(ID, ID)
+rotate_raster(file,out_file_2, 30,800,2800)
+
