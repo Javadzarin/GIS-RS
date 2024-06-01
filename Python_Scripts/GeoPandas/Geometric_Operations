@@ -1,0 +1,32 @@
+import geopandas as gpd
+import matplotlib.pyplot as plt
+
+# Load a sample geospatial dataset
+world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+
+# Calculate the area of each country
+world['area'] = world.area
+
+# Calculate the centroid of each country
+world['centroid'] = world.centroid
+
+# Create bounding boxes for each country
+world['bounding_box'] = world.geometry.bounds
+
+# Display calculated geometric properties
+print(world[['name', 'area', 'centroid', 'bounding_box']].head())
+
+# Plotting the original and centroid
+fig, ax = plt.subplots(1, figsize=(15, 10))
+world.plot(ax=ax, color='lightblue', edgecolor='black')
+world['centroid'].plot(ax=ax, color='red', markersize=5)
+ax.set_title('World Map with Centroids')
+plt.show()
+
+# Optional: plotting the bounding boxes
+fig, bx = plt.subplots(1, figsize=(15, 10))
+world.boundary.plot(ax=bx, color='blue')
+for idx, row in world.iterrows():
+    bbox = gpd.GeoSeries(gpd.box(*row['bounding_box'])).plot(ax=bx, edgecolor='red')
+bx.set_title('Bounding Boxes on World Map')
+plt.show()
