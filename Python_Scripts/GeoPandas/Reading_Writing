@@ -1,0 +1,16 @@
+import geopandas as gpd
+
+# Reading data from a shapefile
+# Ensure you have a shapefile (e.g., 'data.shp') in your working directory or provide the full path
+shapefile_path = 'data.shp'
+data = gpd.read_file(shapefile_path)
+
+# Displaying the first few rows of the GeoDataFrame
+print(data.head())
+
+# Exporting data to a GeoJSON format
+# This will create a GeoJSON file in your current directory
+geojson_path = 'output_data.geojson'
+data.to_file(geojson_path, driver='GeoJSON')
+
+print(f"Data has been successfully written to {geojson_path}")
