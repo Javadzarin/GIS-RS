@@ -1,0 +1,30 @@
+import geopandas as gpd
+import matplotlib.pyplot as plt
+
+# Load two sample geospatial datasets
+world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+cities = gpd.read_file(gpd.datasets.get_path('naturalearth_cities'))
+
+# For demonstration, let's use only a subset of the world dataset, focusing on South America
+south_america = world[world['continent'] == 'South America']
+
+# Create a buffer around cities to simulate an area of interest
+cities['buffered_area'] = cities.buffer(2)  # Buffer by 2 degrees
+
+# Convert buffered cities into a GeoDataFrame
+buffered_cities = gpd.GeoDataFrame(cities, geometry='buffered_area')
+
+# Overlay operation: Intersection of South America countries with buffered cities
+intersection = gpd.overlay(south_america, buffered_cities, how='intersection')
+
+# Plotting the results
+fig, ax = plt.subplots(figsize=(10, 10))
+south_america.plot(ax=ax, color='lightgrey')
+buffered_cities.plot(ax=ax, color='blue', alpha=0.3)
+intersection.plot(ax=ax, color='red')
+ax.set_title('Intersection of South America and Buffered Cities')
+plt.show()
+
+# Display the results of the overlay
+print("Result of Intersection:")
+print(intersection.head())
