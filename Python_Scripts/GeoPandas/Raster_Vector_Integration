@@ -1,0 +1,39 @@
+import geopandas as gpd
+import rasterio
+from rasterio.plot import show
+import matplotlib.pyplot as plt
+
+# Load a vector dataset
+world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+
+# For this example, let's assume we have a raster file named 'elevation.tif' in the working directory
+# Open the raster file using rasterio
+with rasterio.open('elevation.tif') as src:
+    # Read the raster data as an array
+    elevation = src.read(1)
+
+    # Plot the raster data
+    fig, ax = plt.subplots(figsize=(10, 10))
+    show(elevation, ax=ax, title='Global Elevation Map', cmap='terrain')
+    
+    # Overlay the vector data on the raster
+    world.boundary.plot(ax=ax, color='white', linewidth=1)
+    plt.show()
+
+    # Example: Masking raster with vector data
+    # This creates a new raster that only includes the values within the vector geometries
+    out_image, out_transform = rasterio.mask.mask(src, world.geometry, crop=True)
+    out_meta = src.meta.copy()
+
+    # Update the metadata to reflect the number of layers
+    out_meta.update({"driver": "GTiff",
+                     "height": out_image.shape[1],
+                     "width": out_image.shape[2],
+                     "transform": out_transform})
+
+    # Save the masked raster to a new file
+    with rasterio.open('masked_elevation.tif', 'w', **out_meta) as dest:
+        dest.write(out_image)
+
+# Display that the raster has been successfully masked and saved
+print("Raster masked with vector data and saved as 'masked_elevation.tif'")
