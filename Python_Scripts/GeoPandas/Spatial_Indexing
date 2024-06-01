@@ -1,0 +1,27 @@
+import geopandas as gpd
+import matplotlib.pyplot as plt
+
+# Load a sample geospatial dataset
+world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+
+# Create a spatial index for the GeoDataFrame
+sindex = world.sindex
+
+# Example use of the spatial index to quickly locate points within a given bounding box
+# Define a bounding box (minx, miny, maxx, maxy) - in this case, let's consider Europe
+bbox = (40, 34, 50, 60)  # Longitudes and latitudes defining a rough bounding box around Eastern Europe
+
+# Use the spatial index to find shapes that potentially intersect the bounding box
+possible_matches_index = list(sindex.intersection(bbox))
+possible_matches = world.iloc[possible_matches_index]
+
+# Plotting the results
+fig, ax = plt.subplots(1, figsize=(10, 10))
+world.plot(ax=ax, color='lightgrey')
+possible_matches.plot(ax=ax, color='blue', edgecolor='black')
+plt.title('Fast Spatial Queries with Spatial Indexing')
+plt.show()
+
+# Print the names of the countries within the bounding box
+print("Countries within the bounding box:")
+print(possible_matches['name'])
