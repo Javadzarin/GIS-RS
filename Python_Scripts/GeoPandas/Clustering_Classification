@@ -1,0 +1,41 @@
+import geopandas as gpd
+import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
+from shapely.geometry import Point
+import numpy as np
+
+# Create a sample GeoDataFrame with random data points
+np.random.seed(42)  # For reproducible results
+coordinates = np.random.rand(100, 2) * 100  # 100 points in a 100x100 area
+gdf = gpd.GeoDataFrame(geometry=[Point(x, y) for x, y in coordinates])
+
+# Set a coordinate reference system
+gdf.set_crs(epsg=4326, inplace=True)
+
+# Perform K-means clustering (let's assume we want 4 clusters)
+kmeans = KMeans(n_clusters=4)
+gdf['cluster'] = kmeans.fit_predict(coordinates)
+
+# Plot the clusters
+fig, ax = plt.subplots(figsize=(8, 6))
+gdf.plot(ax=ax, column='cluster', categorical=True, legend=True, marker='o', markersize=50, cmap='viridis')
+ax.set_title('Spatial Clustering with K-Means')
+plt.show()
+
+# For classification, let's create a simple example where we classify areas as 'urban' or 'rural'
+# based on a made-up threshold on distance to the nearest point (simulating population density)
+# Calculate the distance to the nearest point for each point
+from sklearn.neighbors import NearestNeighbors
+nn = NearestNeighbors(n_neighbors=2)  # The nearest neighbor will always be the point itself
+nn.fit(coordinates)
+distances, _ = nn.kneighbors(coordinates)
+gdf['nearest_dist'] = distances[:, 1]  # distances[:,0] is always zero because it's the distance to itself
+
+# Classify as 'urban' if the distance to the nearest neighbor is less than 10, otherwise 'rural'
+gdf['area_type'] = np.where(gdf['nearest_dist'] < 10, 'Urban', 'Rural')
+
+# Plot the classification results
+fig, ax = plt.subplots(figsize=(8, 6))
+gdf.plot(ax=ax, column='area_type', categorical=True, legend=True, marker='o', markersize=50, cmap='Set2')
+ax.set_title('Classification of Areas')
+plt.show()
