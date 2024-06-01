@@ -1,0 +1,52 @@
+import geopandas as gpd
+import pandas as pd
+import matplotlib.pyplot as plt
+
+df = pd.read_csv('data/CARVAN_OASA_England_Northern_Ireland_Scotland_Wales_Descriptions.csv')
+df = clean_df(df)
+df.sample(3)
+
+df_geo = gpd.read_file('data/infuse_oa_lyr_2011/infuse_oa_lyr_2011.shp')
+df_geo.sample(3)
+
+print(df.shape)
+df = df.merge(df_geo[['geo_code','geometry']],how='left',on='geo_code')
+print(df.shape)
+
+df.geometry.isnull().sum()
+# 0 
+
+gdf = gpd.GeoDataFrame(df,geometry=df.geometry)
+gdf.sample(3)
+
+gdf.info()
+
+type(gdf.geometry[0])
+
+# shapely.geometry.polygon.Polygon
+
+gdf_ni = gdf.query(‘Country==”Northen Ireland”’)
+
+
+gdf_ni.plot(figsize=(10,10))
+
+gdf_ni.plot(figsize=(10,10),column='car_or_van_availability_households',legend=True)
+
+gdf_ni[‘centroid’] = gdf.geometry.centroid
+gdf_ni.sample(3)
+
+gdf_ni.info()
+
+ax = gdf_ni.set_geometry("centroid").plot('geo_code',markersize=0.5,figsize=(10,10))
+gdf_ni.plot('geo_code',ax=ax,facecolor="none",edgecolor="k",linewidth=0.2)
+
+gdf_ni.plot(figsize=(10,10),column='car_or_van_availability_households',legend=True,scheme='equal_interval')
+
+gdf_ni.plot(figsize=(10,10),column='car_or_van_availability_households',legend=True,scheme='quantiles')
+
+import contextily as cx
+
+gdf_ni = gdf_ni.to_crs('3857')
+ax= gdf_ni.plot(figsize=(10,10),column='car_or_van_availability_households',legend=True,scheme='quantiles')
+cx.add_basemap(ax,crs=gdf_ni.crs.to_string())
+
