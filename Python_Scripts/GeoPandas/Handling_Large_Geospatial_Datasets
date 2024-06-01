@@ -1,0 +1,35 @@
+import geopandas as gpd
+import pandas as pd
+from dask import dataframe as dd
+import dask_geopandas as dgpd
+
+# Assuming we have a large geospatial dataset that doesn't fit into memory
+# For demonstration, let's simulate reading it in chunks from a CSV and converting it to GeoDataFrame
+# Simulating with dask for out-of-core computation
+
+# Generate a dask dataframe (simulating a large dataset)
+df = dd.demo.make_timeseries(start='2000-01-01', end='2000-12-31', dtypes={'x': float, 'y': float}, freq='1H', partition_freq='1M')
+
+# Convert the Dask DataFrame to a Dask GeoDataFrame
+gdf = dgpd.from_dask_dataframe(df)
+
+# Create a 'geometry' column from 'x' and 'y' coordinates
+gdf['geometry'] = dgpd.points_from_xy(gdf, 'x', 'y')
+
+# Set the coordinate reference system
+gdf = gdf.set_crs('epsg:4326')
+
+# Perform spatial operations in parallel
+# For example, calculate buffer zones around points (typical spatial operation)
+gdf['buffer'] = gdf.geometry.buffer(0.1)  # buffer size of 0.1 degrees
+
+# Convert back to a regular GeoDataFrame for final operations or to use non-dask-compatible functions
+result = gdf.compute()  # This loads the data into memory, ensure you have enough memory here or process in further chunks
+
+# Plotting a sample of the data (since the whole dataset might be too large)
+sample_gdf = result.sample(n=1000)  # Taking a random sample
+ax = sample_gdf.plot(color='blue', markersize=5)
+ax.set_title('Sample of Buffered Points')
+plt.show()
+
+# Note: Dask operations are lazy and executed upon calling .compute(). Be cautious with memory usage when calling .compute().
