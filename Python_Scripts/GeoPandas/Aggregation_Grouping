@@ -1,0 +1,27 @@
+import geopandas as gpd
+import matplotlib.pyplot as plt
+
+# Load a sample geospatial dataset
+world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+
+# Aggregating data: calculating total population by continent
+# First, ensure that the population is in numeric format
+world['pop_est'] = world['pop_est'].astype(float)
+
+# Group by continent and sum up the populations
+continent_population = world.groupby('continent').agg({'pop_est': 'sum'})
+
+# Reset index to make 'continent' a column again
+continent_population.reset_index(inplace=True)
+
+# Display the results of the aggregation
+print("Total population by continent:")
+print(continent_population)
+
+# Optionally, plot the results
+fig, ax = plt.subplots(figsize=(10, 6))
+continent_population.plot(kind='bar', x='continent', y='pop_est', legend=False, ax=ax)
+ax.set_xlabel('Continent')
+ax.set_ylabel('Total Population')
+ax.set_title('Total Population by Continent')
+plt.show()
