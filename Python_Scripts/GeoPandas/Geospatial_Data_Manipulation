@@ -1,0 +1,32 @@
+import geopandas as gpd
+import matplotlib.pyplot as plt
+
+# Load a sample geospatial dataset
+world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+
+# Geometric Manipulation: Creating a buffer around each country's geometry
+# Note: Buffer distance is in the units of the coordinate system of the geometries
+buffered_world = world.buffer(1)  # This creates a buffer of 1 degree around each geometry
+
+# Coordinate System Transformation: Transforming from WGS84 to Web Mercator (EPSG:3857)
+world_mercator = world.to_crs(epsg=3857)
+
+# Merging two GeoDataFrames based on a common field
+# For this example, assume we have another GeoDataFrame 'cities' that we want to merge with 'world'
+# We'll simulate the 'cities' DataFrame here for demonstration
+cities_data = {'name': ['Paris', 'Tokyo'], 'country': ['France', 'Japan']}
+cities = gpd.GeoDataFrame(cities_data, geometry=gpd.points_from_xy([2.3522, 139.6917], [48.8566, 35.6895]))
+cities.set_crs(epsg=4326, inplace=True)  # Set the correct coordinate system for cities
+
+# Spatial join: Merging 'cities' with 'world' where city points intersect country polygons
+merged_data = gpd.sjoin(cities, world, how='left', op='intersects')
+
+# Plotting to visualize the results
+fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+world_mercator.plot(ax=ax, color='whitesmoke')
+cities.to_crs(epsg=3857).plot(ax=ax, color='blue', markersize=5)
+buffered_world.to_crs(epsg=3857).boundary.plot(ax=ax, color='green')
+ax.set_title('World Map with Buffered Boundaries and Cities')
+plt.show()
+
+print(merged_data)
