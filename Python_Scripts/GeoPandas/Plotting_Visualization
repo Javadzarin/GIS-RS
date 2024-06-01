@@ -1,0 +1,31 @@
+import geopandas as gpd
+import matplotlib.pyplot as plt
+
+# Load a sample geospatial dataset
+world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+
+# Basic plot
+world.plot()
+plt.title('Basic World Map')
+plt.show()
+
+# Advanced Plotting: Plotting by a categorical variable - GDP per Capita categories
+world['gdp_per_cap'] = world['gdp_md_est'] / world['pop_est'] * 1e6  # Calculate GDP per capita
+fig, ax = plt.subplots(1, figsize=(15, 10))
+world.plot(column='gdp_per_cap', ax=ax, legend=True,
+           legend_kwds={'label': "GDP per Capita (USD)", 'orientation': "horizontal"})
+ax.set_title('World Map Colored by GDP per Capita')
+plt.show()
+
+# Interactive Plot with Geopandas and Contextily
+import contextily as ctx
+
+# Convert to Web Mercator
+world_mercator = world.to_crs(epsg=3857)
+
+fig, ax = plt.subplots(1, figsize=(15, 10))
+world_mercator.plot(column='gdp_per_cap', ax=ax, alpha=0.5, legend=True,
+                    legend_kwds={'label': "GDP per Capita (USD)", 'orientation': "horizontal"})
+ctx.add_basemap(ax, crs=world_mercator.crs.to_string(), source=ctx.providers.CartoDB.Positron)
+ax.set_title('Interactive World Map with Base Layer')
+plt.show()
