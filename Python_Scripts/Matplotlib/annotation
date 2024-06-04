@@ -1,0 +1,143 @@
+# Loading a Sample Dataset
+import pandas as pd
+import matplotlib.pyplot as plt
+%config InlineBackend.figure_format = 'retina'
+
+data = {
+    'Purchase Frequency': [5, 8, 3, 9, 7, 6, 2, 4, 1, 9, 
+                           11, 15, 14, 20, 18, 22, 25, 16, 21, 25], 
+    'Purchase Amount': [150, 70, 190, 140, 60, 80, 55, 75, 65, 85,  
+                        50, 120, 30, 20, 180, 160, 140, 70, 90, 40] }
+
+df = pd.DataFrame(data)
+print(df.head())
+
+# Returns:
+#    Purchase Frequency  Purchase Amount
+# 0                   5              150
+# 1                   8               70
+# 2                   3              190
+# 3                   9              140
+# 4                   7               60
+
+# Creating a Simple Scatter Plot
+x = df['Purchase Frequency']
+y = df['Purchase Amount']
+
+plt.scatter(x, y)
+plt.show()
+
+# Cleaning up our graph
+fig, ax = plt.subplots(figsize=(8, 8))
+ax.scatter(x, y)
+
+# Clean up axes labels
+axes_fonts = {'fontsize': 12, 'fontweight': 'bold'}
+ax.set_xlabel('Purchase Frequency (#)', fontdict=axes_fonts)
+ax.set_ylabel('Purchase Amount ($)', fontdict=axes_fonts)
+
+# Clean up axes values
+ax.set_ylim(0, y.max() + 20)
+ax.set_xlim(0, x.max() + 2)
+
+plt.show()
+
+# Adding lines to our graph
+
+# ...
+
+# Add vertical line for average purchase frequency
+plt.vlines(x=x.mean(), ymin=0, ymax=ymax, linestyles='dashed', colors='grey')
+
+# Add a horizontal line for average purchase amount
+plt.hlines(y=y.mean(), xmin=0, xmax=xmax, linestyles='dashed', colors='grey')
+
+plt.show()
+
+# Adding Text Labels to Our Graph
+# ...
+
+# Add text along the mean purchase amount
+ax.text(
+    x=xmax-0.5, y=y.mean()+2, s=f'Average purchase amount: ${y.mean():.2f}', 
+    ha='right', va='bottom', fontsize=10, color='grey')
+
+# Add text along the mean number of purchases
+ax.text(
+    x=x.mean()-0.25, y=ymax-5, s=f'Average purchases: {x.mean():.1f}', 
+    rotation=90, ha='right', va='top', color='grey')
+
+# Shade different quadrants
+
+# ...
+
+x_mean_fraction = x.mean() / xmax
+ax.axhspan(
+  ymin=0, ymax=y.mean(), xmin=0, xmax=x_mean_fraction, 
+  alpha=0.25, color='pink')            
+ax.axhspan(
+  ymin=y.mean(), ymax=ymax, xmin=x_mean_fraction, 
+  xmax=1, alpha=0.25, color='lightgreen')   
+
+# Move scatter plot down
+ax.scatter(x, y)
+
+plt.show()
+
+# Adding text to our quadrants
+
+# ...
+
+ax.text(x=0.5, y=3,  s='Low frequency, low amount', color='firebrick')
+ax.text(
+  x=xmax-0.5, y=ymax-2, s='High frequency, high amount', 
+  color='darkgreen', ha='right', va='top')
+
+plt.show()
+
+# Adding a conditional column to our DataFrame
+x_mean, y_mean = x.mean(), y.mean()
+
+def color_dot(s):
+    if (s['Purchase Amount'] < y_mean) & (s['Purchase Frequency'] < x_mean):
+        return 'firebrick'
+    elif (s['Purchase Amount'] > y_mean) & (s['Purchase Frequency'] > x_mean):
+        return 'darkgreen'
+    else:
+        return 'grey'
+
+df['Color'] = df.apply(color_dot, axis=1)
+print(df.head())
+
+# Returns:
+#    Purchase Frequency  Purchase Amount      Color
+# 0                   5              150       grey
+# 1                   8               70  firebrick
+# 2                   3              190       grey
+# 3                   9              140       grey
+# 4                   7               60  firebrick
+
+# Adding coloring to our scatter plot
+
+# ...
+ax.scatter(x, y, c=df['Color'])
+# ...
+
+# Add arrow
+
+# ...
+
+ax.annotate(
+    text='The sweet spot', xy=(20, 170), xytext=(30, 200), 
+    arrowprops={'facecolor': 'black', 'arrowstyle': '->', 
+      'connectionstyle': 'arc3,rad=0.2',}
+  )
+
+# Adding Final Touches
+#...
+
+ax.spines['right'].set_visible(False)
+ax.spines['top'].set_visible(False)
+ax.set_title('Comparing Purchase Frequency and Amount', 
+  weight='bold', size=18, pad=20)
+
