@@ -1,0 +1,154 @@
+// Load the GAUL dataset
+var gaul = ee.FeatureCollection("FAO/GAUL_SIMPLIFIED_500m/2015/level2");
+
+// Create UI elements
+var introLabel = ui.Label('VCI and TCI Calculation Tool', {fontWeight: 'bold', fontSize: '24px'});
+var countryLabel = ui.Label('Select Country:');
+var countrySelect = ui.Select({
+  items: gaul.aggregate_array('ADM0_NAME').distinct().sort().getInfo(),
+  placeholder: 'Select a country'
+});
+
+var admin1Label = ui.Label('Select Admin Level 1:');
+var admin1Select = ui.Select({placeholder: 'Select admin level 1'});
+
+var admin2Label = ui.Label('Select Admin Level 2:');
+var admin2Select = ui.Select({placeholder: 'Select admin level 2'});
+
+var startDateLabel = ui.Label('Start Date:');
+var startDateInput = ui.Textbox({placeholder: 'YYYY-MM-DD', value: '2023-01-01'});
+
+var endDateLabel = ui.Label('End Date:');
+var endDateInput = ui.Textbox({placeholder: 'YYYY-MM-DD', value: '2023-12-31'});
+
+var calculateButton = ui.Button('Calculate and Visualize', onCalculate);
+
+var panel = ui.Panel({
+  widgets: [introLabel, countryLabel, countrySelect, admin1Label, admin1Select, admin2Label, admin2Select, startDateLabel, startDateInput, endDateLabel, endDateInput, calculateButton],
+  style: {width: '400px', padding: '10px'}
+});
+ui.root.insert(0, panel);
+
+// Update admin level 1 options based on country selection
+countrySelect.onChange(function(selectedCountry) {
+  var admin1Features = gaul.filter(ee.Filter.eq('ADM0_NAME', selectedCountry));
+  var admin1Names = admin1Features.aggregate_array('ADM1_NAME').distinct().sort().getInfo();
+  admin1Select.items().reset(admin1Names);
+  admin2Select.items().reset([]);
+});
+
+// Update admin level 2 options based on admin level 1 selection
+admin1Select.onChange(function(selectedAdmin1) {
+  var selectedCountry = countrySelect.getValue();
+  var admin2Features = gaul.filter(ee.Filter.and(ee.Filter.eq('ADM0_NAME', selectedCountry), ee.Filter.eq('ADM1_NAME', selectedAdmin1)));
+  var admin2Names = admin2Features.aggregate_array('ADM2_NAME').distinct().sort().getInfo();
+  admin2Select.items().reset(admin2Names);
+});
+
+// Function to calculate and visualize VCI and TCI
+function onCalculate() {
+  var selectedCountry = countrySelect.getValue();
+  var selectedAdmin1 = admin1Select.getValue();
+  var selectedAdmin2 = admin2Select.getValue();
+  var startDate = startDateInput.getValue();
+  var endDate = endDateInput.getValue();
+  
+  var region = gaul.filter(ee.Filter.and(
+    ee.Filter.eq('ADM0_NAME', selectedCountry),
+    ee.Filter.eq('ADM1_NAME', selectedAdmin1),
+    ee.Filter.eq('ADM2_NAME', selectedAdmin2)
+  )).geometry();
+
+  calculateAndVisualizeIndex('VCI', startDate, endDate, region);
+  calculateAndVisualizeIndex('TCI', startDate, endDate, region);
+
+  // Zoom to the selected region
+  Map.centerObject(region, 11);
+}
+
+// Function to calculate and visualize VCI or TCI
+function calculateAndVisualizeIndex(indexType, startDate, endDate, region) {
+  var collection = ee.ImageCollection(indexType === 'VCI' ? "MODIS/006/MOD13A2" : "MODIS/061/MOD11A2")
+    .filterDate(startDate, endDate)
+    .filterBounds(region)
+    .select(indexType === 'VCI' ? 'NDVI' : 'LST_Day_1km');
+
+  var indexMax = collection.max();
+  var indexMin = collection.min();
+
+  var indexCollection = collection.map(function(image) {
+    var indexImage = image.expression(
+      indexType === 'VCI' ? '((ndvi - min) / (max - min)) * 100' : '((max - lst) / (max - min)) * 100',
+      {
+        'ndvi': image.select('NDVI'),
+        'lst': image.select('LST_Day_1km'),
+        'min': indexMin,
+        'max': indexMax
+      }
+    ).rename(indexType).set('system:time_start', image.get('system:time_start'));
+    return indexImage.reproject({
+      crs: 'EPSG:4326',
+      scale: 1000
+    });
+  });
+
+  var yearlyMean = indexCollection.mean().clip(region);
+
+  var palette = ['red', 'orange', 'yellow', 'lightgreen', 'green'];
+
+  Map.addLayer(yearlyMean, {min: 0, max: 100, palette: palette}, indexType + ' (' + startDate + ' to ' + endDate + ')');
+
+  // Add legend
+  addLegend(indexType, palette);
+}
+
+// Function to add a legend
+function addLegend(indexType, palette) {
+  var legendTitle = indexType + ' (%)';
+  
+  var legend = ui.Panel({
+    style: {
+      position: 'bottom-left',
+      padding: '8px 15px'
+    }
+  });
+
+  var legendTitleLabel = ui.Label({
+    value: legendTitle,
+    style: {fontWeight: 'bold', fontSize: '18px', margin: '0 0 4px 0'}
+  });
+
+  var makeRow = function(color, name) {
+    var colorBox = ui.Label({
+      style: {
+        backgroundColor: color,
+        padding: '8px',
+        margin: '0 0 4px 0'
+      }
+    });
+    var description = ui.Label({
+      value: name,
+      style: {margin: '0 0 4px 6px'}
+    });
+    return ui.Panel({
+      widgets: [colorBox, description],
+      layout: ui.Panel.Layout.Flow('horizontal')
+    });
+  };
+
+  legend.add(legendTitleLabel);
+  legend.add(makeRow(palette[0], '0-20% (Very Low)'));
+  legend.add(makeRow(palette[1], '21-40% (Low)'));
+  legend.add(makeRow(palette[2], '41-60% (Medium)'));
+  legend.add(makeRow(palette[3], '61-80% (High)'));
+  legend.add(makeRow(palette[4], '81-100% (Very High)'));
+
+  Map.add(legend);
+}
+
+// Center the map on the selected region
+countrySelect.onChange(function() {
+  var selectedCountry = countrySelect.getValue();
+  var countryGeometry = gaul.filter(ee.Filter.eq('ADM0_NAME', selectedCountry)).geometry();
+  Map.centerObject(countryGeometry, 6);
+});
