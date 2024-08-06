@@ -45,6 +45,15 @@ admin1Select.onChange(function(selectedAdmin1) {
   admin2Select.items().reset(admin2Names);
 });
 
+// Create a panel for the legend
+var legendPanel = ui.Panel({
+  style: {
+    position: 'bottom-left',
+    padding: '8px 15px'
+  }
+});
+Map.add(legendPanel);
+
 // Function to calculate and visualize VCI and TCI
 function onCalculate() {
   var selectedCountry = countrySelect.getValue();
@@ -63,7 +72,7 @@ function onCalculate() {
   calculateAndVisualizeIndex('TCI', startDate, endDate, region);
 
   // Zoom to the selected region
-  Map.centerObject(region, 11);
+  Map.centerObject(region, 10);
 }
 
 // Function to calculate and visualize VCI or TCI
@@ -104,15 +113,10 @@ function calculateAndVisualizeIndex(indexType, startDate, endDate, region) {
 
 // Function to add a legend
 function addLegend(indexType, palette) {
+  legendPanel.clear();
+
   var legendTitle = indexType + ' (%)';
   
-  var legend = ui.Panel({
-    style: {
-      position: 'bottom-left',
-      padding: '8px 15px'
-    }
-  });
-
   var legendTitleLabel = ui.Label({
     value: legendTitle,
     style: {fontWeight: 'bold', fontSize: '18px', margin: '0 0 4px 0'}
@@ -136,14 +140,12 @@ function addLegend(indexType, palette) {
     });
   };
 
-  legend.add(legendTitleLabel);
-  legend.add(makeRow(palette[0], '0-20% (Very Low)'));
-  legend.add(makeRow(palette[1], '21-40% (Low)'));
-  legend.add(makeRow(palette[2], '41-60% (Medium)'));
-  legend.add(makeRow(palette[3], '61-80% (High)'));
-  legend.add(makeRow(palette[4], '81-100% (Very High)'));
-
-  Map.add(legend);
+  legendPanel.add(legendTitleLabel);
+  legendPanel.add(makeRow(palette[0], '0-20% (Very Low)'));
+  legendPanel.add(makeRow(palette[1], '21-40% (Low)'));
+  legendPanel.add(makeRow(palette[2], '41-60% (Medium)'));
+  legendPanel.add(makeRow(palette[3], '61-80% (High)'));
+  legendPanel.add(makeRow(palette[4], '81-100% (Very High)'));
 }
 
 // Center the map on the selected region
