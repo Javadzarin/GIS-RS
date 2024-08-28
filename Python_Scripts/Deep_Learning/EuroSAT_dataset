@@ -1,0 +1,132 @@
+!pip install tensorflow keras matplotlib scikit-learn
+
+import tensorflow as tf
+from tensorflow import keras
+import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.model_selection import train_test_split
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+
+!wget http://madm.dfki.de/files/sentinel/EuroSAT.zip
+!unzip EuroSAT.zip
+
+# Set up data generators
+train_datagen = ImageDataGenerator(
+    rescale=1./255,
+    rotation_range=20,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    horizontal_flip=True,
+    validation_split=0.2
+)
+
+train_generator = train_datagen.flow_from_directory(
+    '2750',
+    target_size=(64, 64),
+    batch_size=32,
+    class_mode='categorical',
+    subset='training'
+)
+
+validation_generator = train_datagen.flow_from_directory(
+    '2750',
+    target_size=(64, 64),
+    batch_size=32,
+    class_mode='categorical',
+    subset='validation'
+)
+
+model = keras.Sequential([
+    keras.layers.Conv2D(32, (3, 3), activation='relu', input_shape=(64, 64, 3)),
+    keras.layers.MaxPooling2D((2, 2)),
+    keras.layers.Conv2D(64, (3, 3), activation='relu'),
+    keras.layers.MaxPooling2D((2, 2)),
+    keras.layers.Conv2D(64, (3, 3), activation='relu'),
+    keras.layers.Flatten(),
+    keras.layers.Dense(64, activation='relu'),
+    keras.layers.Dense(10, activation='softmax')
+])
+
+model.compile(optimizer='adam',
+              loss='categorical_crossentropy',
+              metrics=['accuracy'])
+
+history = model.fit(
+    train_generator,
+    steps_per_epoch=train_generator.samples // train_generator.batch_size,
+    epochs=15,
+    validation_data=validation_generator,
+    validation_steps=validation_generator.samples // validation_generator.batch_size
+)
+
+# Plot training history
+plt.plot(history.history['accuracy'], label='accuracy')
+plt.plot(history.history['val_accuracy'], label='val_accuracy')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.legend()
+plt.show()
+
+# Evaluate on the validation set
+evaluation = model.evaluate(validation_generator)
+print(f"Validation accuracy: {evaluation[1]:.4f}")
+
+import matplotlib.pyplot as plt
+import numpy as np
+from tensorflow.keras.preprocessing import image
+
+def visualize_predictions(model, data_generator, num_images=5):
+    plt.figure(figsize=(20, 4*num_images))
+
+    for i in range(num_images):
+        # Get a random image and its true label
+        img, label = next(data_generator)
+        img = img[0]  # Get the first image from the batch
+        true_label = np.argmax(label[0])
+
+        # Make a prediction
+        prediction = model.predict(np.expand_dims(img, axis=0))
+        predicted_label = np.argmax(prediction)
+
+        # Display the image and prediction
+        plt.subplot(num_images, 2, 2*i+1)
+        plt.imshow(img)
+        plt.title(f"True: {list(data_generator.class_indices.keys())[true_label]}\nPredicted: {list(data_generator.class_indices.keys())[predicted_label]}")
+        plt.axis('off')
+
+        # Display the prediction probabilities
+        plt.subplot(num_images, 2, 2*i+2)
+        plt.bar(list(data_generator.class_indices.keys()), prediction[0])
+        plt.title("Prediction Probabilities")
+        plt.xticks(rotation=90)
+
+    plt.tight_layout()
+    plt.show()
+
+# Use the function
+visualize_predictions(model, validation_generator)
+
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
+
+def plot_confusion_matrix(model, data_generator):
+    # Get predictions
+    y_pred = model.predict(data_generator)
+    y_pred_classes = np.argmax(y_pred, axis=1)
+    y_true = data_generator.classes
+
+    # Compute confusion matrix
+    cm = confusion_matrix(y_true, y_pred_classes)
+
+    # Plot confusion matrix
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=data_generator.class_indices.keys(),
+                yticklabels=data_generator.class_indices.keys())
+    plt.title('Confusion Matrix')
+    plt.ylabel('True Label')
+    plt.xlabel('Predicted Label')
+    plt.show()
+
+# Use the function
+plot_confusion_matrix(model, validation_generator)
